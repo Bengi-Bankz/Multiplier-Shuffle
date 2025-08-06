@@ -1,6 +1,7 @@
 import { Container, Sprite, Graphics, Text } from "pixi.js";
 import { engine } from "../app/getEngine";
 import { sound } from "@pixi/sound";
+import { stakeAPI } from "./stakeAPI";
 
 export class Shuffleboard extends Container {
   private puck?: Sprite;
@@ -11,12 +12,20 @@ export class Shuffleboard extends Container {
   private winModal?: Container;  // Win display modal
   private winAmountText?: Text;  // Reference to win amount text
   private multiplierText?: Text;  // Reference to multiplier text
+  private welcomeTitleText?: Text;  // Reference to welcome title text
+  private welcomeInstructionText?: Text;  // Reference to welcome instruction text
+  private welcomeStatsText?: Text;  // Reference to welcome stats text
+  private winTitleText?: Text;  // Reference to "LAST WIN" title text
   private boardBorder?: Graphics;
   private isAutoMode: boolean = false;
   private autoInterval?: number;
   private lastWinAmount: number = 0;
   private lastWinMultiplier: number = 0;
   private keyboardHandler?: (event: KeyboardEvent) => void;
+  private gameScreenRef?: any; // Reference to GameScreen for bet controls
+  private isProcessingRound: boolean = false; // Prevent multiple simultaneous plays
+  private currentRound?: any; // Current active round
+  private targetZone: number = 0; // Target zone for animation
 
   constructor() {
     super();
@@ -117,38 +126,53 @@ export class Shuffleboard extends Container {
     try {
       console.log("Shuffleboard: Creating game title");
       
-      // Create the game title text
-      const gameTitle = new Text("MULTIPLIER SHUFFLE", {
-        fontSize: 64,
-        fontWeight: 'bold',
-        fill: 0x87CEEB, // Baby blue color
-        align: 'center',
-        fontFamily: 'Arial, sans-serif'
+      // Create container for the title words
+      const titleContainer = new Container();
+      
+      // Split title into words and create each on its own row
+      const words = ["MULTIPLIER", "SHUFFLE"];
+      const wordSpacing = 80; // Vertical spacing between words
+      
+      words.forEach((word, index) => {
+        // Create the word text
+        const wordText = new Text(word, {
+          fontSize: 48, // Smaller font size for side placement
+          fontWeight: 'bold',
+          fill: 0x87CEEB, // Baby blue color
+          align: 'left',
+          fontFamily: 'Arial, sans-serif'
+        });
+        
+        wordText.anchor.set(0, 0.5); // Left-aligned, center vertically
+        wordText.x = 0;
+        wordText.y = index * wordSpacing - (wordSpacing / 2); // Center the group vertically
+        
+        // Create shadow for each word
+        const wordShadow = new Text(word, {
+          fontSize: 48,
+          fontWeight: 'bold',
+          fill: 0x000000, // Black shadow
+          align: 'left',
+          fontFamily: 'Arial, sans-serif'
+        });
+        
+        wordShadow.anchor.set(0, 0.5);
+        wordShadow.x = 2; // Slightly offset for shadow effect
+        wordShadow.y = (index * wordSpacing - (wordSpacing / 2)) + 2; // Slightly offset for shadow effect
+        wordShadow.alpha = 0.3; // Make shadow semi-transparent
+        
+        // Add shadow first, then word (so word appears on top)
+        titleContainer.addChild(wordShadow);
+        titleContainer.addChild(wordText);
       });
       
-      gameTitle.anchor.set(0.5);
-      gameTitle.x = 0; // Center horizontally
-      gameTitle.y = -420; // Position above the board (board starts at y=50, so -420 gives good spacing)
+      // Position title container on the left side
+      titleContainer.x = -400; // Left side position (will be adjusted in resize)
+      titleContainer.y = -200; // Upper area
       
-      // Add a subtle text shadow effect by creating a duplicate text slightly offset
-      const titleShadow = new Text("MULTIPLIER SHUFFLE", {
-        fontSize: 64,
-        fontWeight: 'bold',
-        fill: 0x000000, // Black shadow
-        align: 'center',
-        fontFamily: 'Arial, sans-serif'
-      });
+      this.boardContainer.addChild(titleContainer);
       
-      titleShadow.anchor.set(0.5);
-      titleShadow.x = 2; // Slightly offset for shadow effect
-      titleShadow.y = -418; // Slightly offset for shadow effect
-      titleShadow.alpha = 0.3; // Make shadow semi-transparent
-      
-      // Add shadow first, then title (so title appears on top)
-      this.boardContainer.addChild(titleShadow);
-      this.boardContainer.addChild(gameTitle);
-      
-      console.log("Shuffleboard: Game title created at:", { x: gameTitle.x, y: gameTitle.y });
+      console.log("Shuffleboard: Game title created on left side at:", { x: titleContainer.x, y: titleContainer.y });
     } catch (error) {
       console.error("Shuffleboard: Error creating game title:", error);
     }
@@ -161,27 +185,50 @@ export class Shuffleboard extends Container {
       // Create win modal container
       this.winModal = new Container();
       
-      // Modal background with rounded rectangle
+      // Modal background with rounded rectangle - make it wider for more content
       const modalBg = new Graphics();
-      const modalWidth = 280;
-      const modalHeight = 120;
+      const modalWidth = 350;
+      const modalHeight = 160;
       modalBg.roundRect(-modalWidth/2, -modalHeight/2, modalWidth, modalHeight, 15);
       modalBg.fill({ color: 0x000000, alpha: 0.8 }); // Semi-transparent black background
       modalBg.stroke({ color: 0x87CEEB, width: 3 }); // Baby blue border
       
-      // Title text
-      const titleText = new Text("LAST WIN", {
-        fontSize: 24,
+      // Title text - show loading message initially
+      this.welcomeTitleText = new Text("WELCOME TO MULTIPLIER SHUFFLE", {
+        fontSize: 18,
         fontWeight: 'bold',
         fill: 0x87CEEB, // Baby blue color
         align: 'center',
         fontFamily: 'Arial, sans-serif'
       });
-      titleText.anchor.set(0.5);
-      titleText.x = 0;
-      titleText.y = -35;
+      this.welcomeTitleText.anchor.set(0.5);
+      this.welcomeTitleText.x = 0;
+      this.welcomeTitleText.y = -55;
       
-      // Win amount text
+      // Loading instruction
+      this.welcomeInstructionText = new Text("Click LAUNCH to send puck\nto multiplier heaven!", {
+        fontSize: 16,
+        fill: 0xFFFFFF, // White color
+        align: 'center',
+        fontFamily: 'Arial, sans-serif'
+      });
+      this.welcomeInstructionText.anchor.set(0.5);
+      this.welcomeInstructionText.x = 0;
+      this.welcomeInstructionText.y = -20;
+      
+      // Game stats
+      this.welcomeStatsText = new Text("Max Win: 1000X  •  RTP: 98%", {
+        fontSize: 14,
+        fontWeight: 'bold',
+        fill: 0x87CEEB, // Baby blue color
+        align: 'center',
+        fontFamily: 'Arial, sans-serif'
+      });
+      this.welcomeStatsText.anchor.set(0.5);
+      this.welcomeStatsText.x = 0;
+      this.welcomeStatsText.y = 15;
+      
+      // Win amount text (initially hidden)
       this.winAmountText = new Text(`$${this.lastWinAmount.toFixed(2)}`, {
         fontSize: 28,
         fontWeight: 'bold',
@@ -191,9 +238,10 @@ export class Shuffleboard extends Container {
       });
       this.winAmountText.anchor.set(0.5);
       this.winAmountText.x = 0;
-      this.winAmountText.y = 0;
+      this.winAmountText.y = -10;
+      this.winAmountText.visible = false; // Hidden initially
       
-      // Multiplier text
+      // Multiplier text (initially hidden)
       this.multiplierText = new Text(`${this.lastWinMultiplier}x`, {
         fontSize: 22,
         fontWeight: 'bold',
@@ -204,20 +252,23 @@ export class Shuffleboard extends Container {
       this.multiplierText.anchor.set(0.5);
       this.multiplierText.x = 0;
       this.multiplierText.y = 25;
+      this.multiplierText.visible = false; // Hidden initially
       
       // Add all elements to modal container
       this.winModal.addChild(modalBg);
-      this.winModal.addChild(titleText);
+      this.winModal.addChild(this.welcomeTitleText);
+      this.winModal.addChild(this.welcomeInstructionText);
+      this.winModal.addChild(this.welcomeStatsText);
       this.winModal.addChild(this.winAmountText);
       this.winModal.addChild(this.multiplierText);
       
-      // Position above where the launch button will be (will be repositioned in resize)
-      this.winModal.x = 400;
-      this.winModal.y = 100;
+      // Position at top of board (will be repositioned in resize)
+      this.winModal.x = 0; // Center horizontally with board
+      this.winModal.y = -400; // Move higher up from board area
       
       this.boardContainer.addChild(this.winModal);
       
-      console.log("Shuffleboard: Win modal created at:", { x: this.winModal.x, y: this.winModal.y });
+      console.log("Shuffleboard: Win modal created at top of board:", { x: this.winModal.x, y: this.winModal.y });
     } catch (error) {
       console.error("Shuffleboard: Error creating win modal:", error);
     }
@@ -417,26 +468,6 @@ export class Shuffleboard extends Container {
     console.log("Shuffleboard: Fixed borders created to properly contain board");
   }
 
-  private slideUp = () => {
-    if (!this.puck) return;
-    
-    this.puck.y -= 10;
-    if (this.puck.y < -300) {
-      engine().ticker.remove(this.slideUp, this);
-      // Reset puck position to the white launch pad
-      this.puck.y = 443; // Reset to launch pad position (438 + 5px)
-      
-      // If in auto mode, start the next shot after a short delay
-      if (this.isAutoMode) {
-        setTimeout(() => {
-          if (this.isAutoMode) { // Check again in case auto was turned off
-            this.launchPuck();
-          }
-        }, 200); // 200ms delay for turbo speed
-      }
-    }
-  }
-
   private toggleAutoMode(button: Graphics, buttonText: Text) {
     this.isAutoMode = !this.isAutoMode;
     
@@ -466,22 +497,266 @@ export class Shuffleboard extends Container {
     }
   }
 
-  private launchPuck() {
-    // Same animation as manual launch but called automatically
-    if (!engine().ticker.started) return;
-    engine().ticker.add(this.slideUp, this);
+  private async launchPuck() {
+    // Prevent multiple simultaneous rounds
+    if (this.isProcessingRound) {
+      console.log("Round already in progress, ignoring launch request");
+      return;
+    }
+
+    // Clear win modal when launching puck
+    this.clearWinModal();
+    
+    try {
+      this.isProcessingRound = true;
+      
+      // Get bet amount from GameScreen
+      const betAmount = this.gameScreenRef?.getBetAmount() || 1.00;
+      const betAmountMicro = stakeAPI.toMicroUnits(betAmount);
+      
+      console.log("Launching puck with bet:", betAmount);
+      
+      // Track game event
+      await stakeAPI.trackEvent('puck_launch');
+      
+      // Call Stake API to play round
+      const playResponse = await stakeAPI.play(betAmountMicro);
+      this.currentRound = playResponse.round;
+      
+      // Update balance in GameScreen
+      if (this.gameScreenRef?.updateBalance) {
+        const newBalance = stakeAPI.fromMicroUnits(playResponse.balance.amount);
+        this.gameScreenRef.updateBalance(newBalance);
+      }
+      
+      // Extract game result from round data
+      const { multiplier, finalPosition, winAmount } = playResponse.round;
+      this.targetZone = finalPosition || 0;
+      
+      // Start puck animation to target zone
+      this.animatePuckToZone(this.targetZone, multiplier, stakeAPI.fromMicroUnits(winAmount || 0));
+      
+    } catch (error) {
+      console.error("Error launching puck:", error);
+      this.isProcessingRound = false;
+      
+      // Fallback: use local simulation
+      this.simulateLocalGame();
+    }
+  }
+
+  private animatePuckToZone(targetZone: number, multiplier: number, winAmount: number) {
+    if (!this.puck || !engine().ticker.started) return;
+    
+    console.log(`Animating puck to zone ${targetZone}, multiplier: ${multiplier}x, win: $${winAmount}`);
+    
+    // Calculate target Y position based on zone
+    const zoneHeight = 60;
+    const totalZones = 12;
+    const boardHeight = zoneHeight * totalZones;
+    const startY = 443; // Launch pad position
+    const targetY = targetZone * zoneHeight - (boardHeight / 2) + (zoneHeight / 2) + 50; // Board offset
+    
+    // Store animation state
+    const animationData = {
+      startY: startY,
+      targetY: targetY,
+      currentY: startY,
+      progress: 0,
+      multiplier: multiplier,
+      winAmount: winAmount,
+      duration: 2000 + Math.random() * 1000, // 2-3 seconds
+      startTime: Date.now()
+    };
+    
+    // Smooth animation function with easing
+    const animatePuck = () => {
+      if (!this.puck) {
+        engine().ticker.remove(animatePuck, this);
+        return;
+      }
+      
+      const elapsed = Date.now() - animationData.startTime;
+      const progress = Math.min(elapsed / animationData.duration, 1);
+      
+      // Ease out cubic for realistic physics
+      const easeProgress = 1 - Math.pow(1 - progress, 3);
+      
+      // Update puck position with some horizontal drift for realism
+      const drift = Math.sin(progress * Math.PI * 2) * 15;
+      this.puck.y = animationData.startY + (animationData.targetY - animationData.startY) * easeProgress;
+      this.puck.x = drift;
+      
+      // Animation complete
+      if (progress >= 1) {
+        engine().ticker.remove(animatePuck, this);
+        this.onPuckLanded(animationData.multiplier, animationData.winAmount);
+      }
+    };
+    
+    // Start animation
+    engine().ticker.add(animatePuck, this);
+  }
+
+  private async onPuckLanded(multiplier: number, winAmount: number) {
+    console.log(`Puck landed! Multiplier: ${multiplier}x, Win: $${winAmount}`);
+    
+    try {
+      // Track landing event
+      await stakeAPI.trackEvent('puck_landed');
+      
+      // Update win display
+      this.updateWinDisplay(winAmount, multiplier);
+      
+      // If there's a win, we need to call endRound to complete the bet
+      if (winAmount > 0 && this.currentRound) {
+        console.log("Win detected, calling endRound to complete bet...");
+        
+        // Add small delay for dramatic effect
+        setTimeout(async () => {
+          try {
+            const endRoundResponse = await stakeAPI.endRound();
+            
+            // Update balance after payout
+            if (this.gameScreenRef?.updateBalance) {
+              const finalBalance = stakeAPI.fromMicroUnits(endRoundResponse.balance.amount);
+              this.gameScreenRef.updateBalance(finalBalance);
+            }
+            
+            console.log("Round completed successfully");
+          } catch (error) {
+            console.error("Error ending round:", error);
+          }
+        }, 1000);
+      }
+      
+    } catch (error) {
+      console.error("Error in puck landed handler:", error);
+    } finally {
+      // Reset puck position and processing state
+      this.resetPuckPosition();
+      this.isProcessingRound = false;
+      this.currentRound = null;
+      
+      // Continue auto mode if it's enabled
+      if (this.isAutoMode) {
+        setTimeout(() => {
+          if (this.isAutoMode) { // Check again in case auto was turned off
+            this.launchPuck();
+          }
+        }, 500); // 500ms delay between auto shots
+      }
+    }
+  }
+
+  private resetPuckPosition() {
+    if (this.puck) {
+      this.puck.x = 0;
+      this.puck.y = 443; // Launch pad position
+    }
+  }
+
+  private simulateLocalGame() {
+    console.log("Using local game simulation");
+    
+    // Define multiplier zones (same as createBoard)
+    const multiplierZones = [0, 1000, 0, 500, 100, 25, 10, 5, 1, 0, 0, 0]; // Skip DROP zone
+    const randomZone = Math.floor(Math.random() * multiplierZones.length);
+    const multiplier = multiplierZones[randomZone];
+    const betAmount = this.gameScreenRef?.getBetAmount() || 1.00;
+    const winAmount = betAmount * multiplier;
+    
+    // Animate to the randomly selected zone
+    this.animatePuckToZone(randomZone, multiplier, winAmount);
+  }
+
+  private clearWinModal() {
+    // Reset win modal to show welcome message instead of win results
+    console.log("Clearing win modal - resetting to welcome state");
+    
+    // Show welcome content
+    if (this.welcomeTitleText) {
+      this.welcomeTitleText.visible = true;
+      console.log("Welcome title text shown");
+    }
+    
+    if (this.welcomeInstructionText) {
+      this.welcomeInstructionText.visible = true;
+      console.log("Welcome instruction text shown");
+    }
+    
+    if (this.welcomeStatsText) {
+      this.welcomeStatsText.visible = true;
+      console.log("Welcome stats text shown");
+    }
+    
+    // Hide win content
+    if (this.winTitleText) {
+      this.winTitleText.visible = false;
+      console.log("Win title text hidden");
+    }
+    
+    if (this.winAmountText) {
+      this.winAmountText.visible = false;
+      console.log("Win amount text hidden");
+    }
+    
+    if (this.multiplierText) {
+      this.multiplierText.visible = false;
+      console.log("Multiplier text hidden");
+    }
+    
+    console.log("Win modal cleared - showing welcome message");
   }
 
   public updateWinDisplay(winAmount: number, multiplier: number) {
     this.lastWinAmount = winAmount;
     this.lastWinMultiplier = multiplier;
     
+    console.log("Updating win display - hiding welcome, showing win results");
+    
+    // Hide welcome content
+    if (this.welcomeTitleText) {
+      this.welcomeTitleText.visible = false;
+    }
+    
+    if (this.welcomeInstructionText) {
+      this.welcomeInstructionText.visible = false;
+    }
+    
+    if (this.welcomeStatsText) {
+      this.welcomeStatsText.visible = false;
+    }
+    
+    // Create or show "LAST WIN" title
+    if (!this.winTitleText && this.winModal) {
+      this.winTitleText = new Text("LAST WIN", {
+        fontSize: 24,
+        fontWeight: 'bold',
+        fill: 0x87CEEB, // Baby blue color
+        align: 'center',
+        fontFamily: 'Arial, sans-serif'
+      });
+      this.winTitleText.anchor.set(0.5);
+      this.winTitleText.x = 0;
+      this.winTitleText.y = -35;
+      this.winModal.addChild(this.winTitleText);
+      console.log("Created LAST WIN title");
+    }
+    
+    if (this.winTitleText) {
+      this.winTitleText.visible = true;
+    }
+    
+    // Show win results
     if (this.winAmountText) {
       this.winAmountText.text = `$${winAmount.toFixed(2)}`;
+      this.winAmountText.visible = true;
     }
     
     if (this.multiplierText) {
       this.multiplierText.text = `${multiplier}x`;
+      this.multiplierText.visible = true;
     }
     
     // Play cashout sound for big wins (100x multiplier or more, or $100+ win)
@@ -509,7 +784,7 @@ export class Shuffleboard extends Container {
     try {
       console.log("Shuffleboard: Setting up keyboard controls");
       
-      // Add keyboard event listener for spacebar
+      // Add keyboard event listener for spacebar and arrow keys
       const handleKeyDown = (event: KeyboardEvent) => {
         // Check if spacebar was pressed (keyCode 32 or key === ' ')
         if (event.code === 'Space' || event.key === ' ') {
@@ -523,6 +798,22 @@ export class Shuffleboard extends Container {
             console.log("Spacebar pressed but auto mode is active - ignoring");
           }
         }
+        // Handle up arrow for bet increase
+        else if (event.code === 'ArrowUp' || event.key === 'ArrowUp') {
+          event.preventDefault(); // Prevent page scroll
+          if (this.gameScreenRef && this.gameScreenRef.increaseBet) {
+            this.gameScreenRef.increaseBet();
+            console.log("Up arrow pressed - increasing bet");
+          }
+        }
+        // Handle down arrow for bet decrease
+        else if (event.code === 'ArrowDown' || event.key === 'ArrowDown') {
+          event.preventDefault(); // Prevent page scroll
+          if (this.gameScreenRef && this.gameScreenRef.decreaseBet) {
+            this.gameScreenRef.decreaseBet();
+            console.log("Down arrow pressed - decreasing bet");
+          }
+        }
       };
       
       // Add the event listener to the document
@@ -531,10 +822,15 @@ export class Shuffleboard extends Container {
       // Store reference to remove listener later
       this.keyboardHandler = handleKeyDown;
       
-      console.log("Shuffleboard: Keyboard controls setup complete - spacebar will launch puck");
+      console.log("Shuffleboard: Keyboard controls setup complete - spacebar launches, arrows control bet");
     } catch (error) {
       console.error("Shuffleboard: Error setting up keyboard controls:", error);
     }
+  }
+
+  public setGameScreenReference(gameScreen: any) {
+    this.gameScreenRef = gameScreen;
+    console.log("Shuffleboard: GameScreen reference set for bet controls");
   }
 
   public resize(width: number, height: number) {
@@ -546,50 +842,139 @@ export class Shuffleboard extends Container {
     
     console.log("Shuffleboard positioned at:", { x: this.x, y: this.y });
     
-    // Detect landscape mode and reposition launch button
+    // Define responsive breakpoints (media query style)
+    const isMobile = width < 768; // Mobile: < 768px
+    const isTablet = width >= 768 && width < 1024; // Tablet: 768px - 1023px
+    const isDesktop = width >= 1024; // Desktop: >= 1024px
     const isLandscape = width > height;
+    const isPortrait = height > width;
     
+    console.log("Device type:", { isMobile, isTablet, isDesktop, isLandscape, isPortrait });
+    
+    // Position launch button based on device type and orientation
     if (this.playbar) {
-      if (isLandscape) {
-        // In landscape, position launch button to the right of center with more spacing
-        this.playbar.x = (width / 4) + 100; // Right of center
-        this.playbar.y = 100; // More space from top (was 50)
-        console.log("Launch button positioned for landscape at:", { x: this.playbar.x, y: this.playbar.y });
+      if (isMobile) {
+        if (isPortrait) {
+          // Mobile Portrait: Bottom right corner (relative to shuffleboard center)
+          this.playbar.x = (width / 2) - 120; // Offset from shuffleboard center
+          this.playbar.y = (height / 2) - 120; // Offset from shuffleboard center
+        } else {
+          // Mobile Landscape: Right side, centered vertically
+          this.playbar.x = (width / 2) - 140; // Offset from shuffleboard center
+          this.playbar.y = 0; // Center relative to shuffleboard
+        }
+      } else if (isTablet) {
+        if (isPortrait) {
+          // Tablet Portrait: Bottom right with more space
+          this.playbar.x = (width / 2) - 150; // Offset from shuffleboard center
+          this.playbar.y = (height / 2) - 140; // Offset from shuffleboard center
+        } else {
+          // Tablet Landscape: Right side, upper area
+          this.playbar.x = (width / 2) - 160; // Offset from shuffleboard center
+          this.playbar.y = -(height / 6); // Upper area relative to shuffleboard
+        }
       } else {
-        // In portrait, position at bottom right in horizontal row
-        this.playbar.x = width - 120; // Far right, 120px from edge
-        this.playbar.y = height - 120; // More space from bottom (was 80)
-        console.log("Launch button positioned for portrait at:", { x: this.playbar.x, y: this.playbar.y });
+        // Desktop: Right side with generous spacing
+        if (isLandscape) {
+          this.playbar.x = (width / 2) - 200; // Offset from shuffleboard center
+          this.playbar.y = -(height / 4); // Upper area relative to shuffleboard
+        } else {
+          this.playbar.x = (width / 2) - 160; // Offset from shuffleboard center
+          this.playbar.y = (height / 2) - 160; // Offset from shuffleboard center
+        }
       }
+      console.log("Launch button positioned at:", { x: this.playbar.x, y: this.playbar.y });
     }
     
-    // Position auto button below launch button with more spacing
-    if (this.autoButton) {
-      if (isLandscape) {
-        // In landscape, position auto button below the launch button with more space
-        this.autoButton.x = (width / 4) + 100; // Same x as launch button
-        this.autoButton.y = 200; // More space below launch button (was 120)
-        console.log("Auto button positioned for landscape at:", { x: this.autoButton.x, y: this.autoButton.y });
+    // Position auto button relative to launch button
+    if (this.autoButton && this.playbar) {
+      if (isMobile) {
+        if (isPortrait) {
+          // Mobile Portrait: Horizontally aligned, left of launch button
+          this.autoButton.x = this.playbar.x - 200; // 200px left of launch button
+          this.autoButton.y = this.playbar.y; // Same vertical position
+        } else {
+          // Mobile Landscape: Below launch button
+          this.autoButton.x = this.playbar.x; // Same horizontal position
+          this.autoButton.y = this.playbar.y + 80; // 80px below launch button
+        }
+      } else if (isTablet) {
+        if (isPortrait) {
+          // Tablet Portrait: Horizontally aligned, more space
+          this.autoButton.x = this.playbar.x - 220; // 220px left of launch button
+          this.autoButton.y = this.playbar.y; // Same vertical position
+        } else {
+          // Tablet Landscape: Below launch button with more space
+          this.autoButton.x = this.playbar.x; // Same horizontal position
+          this.autoButton.y = this.playbar.y + 100; // 100px below launch button
+        }
       } else {
-        // In portrait, position at bottom center-right in horizontal row
-        this.autoButton.x = width - 300; // Center-right, 300px from right edge (to left of play button)
-        this.autoButton.y = height - 120; // Same y as play button
-        console.log("Auto button positioned for portrait at:", { x: this.autoButton.x, y: this.autoButton.y });
+        // Desktop: Below launch button with generous spacing
+        this.autoButton.x = this.playbar.x; // Same horizontal position
+        this.autoButton.y = this.playbar.y + 120; // 120px below launch button
       }
+      console.log("Auto button positioned at:", { x: this.autoButton.x, y: this.autoButton.y });
     }
     
-    // Position win modal above launch button with more spacing
+    // Position win modal at the top of the board (fixed position)
     if (this.winModal) {
-      if (isLandscape) {
-        // In landscape, position win modal above the launch button with more space
-        this.winModal.x = (width / 4) + 100; // Same x as launch button
-        this.winModal.y = -50; // More space above launch button
-        console.log("Win modal positioned for landscape at:", { x: this.winModal.x, y: this.winModal.y });
+      // Always position at top center of the board, regardless of device
+      this.winModal.x = 0; // Center horizontally with board
+      this.winModal.y = -400; // Fixed position higher up from board
+      console.log("Win modal positioned at top of board:", { x: this.winModal.x, y: this.winModal.y });
+    }
+    
+    // Scale board for different screen sizes
+    if (this.board) {
+      let boardScale = 1.0;
+      
+      if (isMobile) {
+        boardScale = isPortrait ? 0.6 : 0.7; // Smaller on mobile
+      } else if (isTablet) {
+        boardScale = isPortrait ? 0.8 : 0.9; // Medium on tablet
       } else {
-        // In portrait, position above the launch button area with more spacing
-        this.winModal.x = width - 120; // Same x as launch button
-        this.winModal.y = height - 280; // More space above launch button (was -200)
-        console.log("Win modal positioned for portrait at:", { x: this.winModal.x, y: this.winModal.y });
+        boardScale = 1.0; // Full size on desktop
+      }
+      
+      this.board.scale.set(boardScale);
+      console.log("Board scaled to:", boardScale);
+    }
+    
+    // Scale and position game title for different screen sizes
+    if (this.boardContainer.children.length > 1) {
+      // Find the game title container
+      for (let child of this.boardContainer.children) {
+        if (child instanceof Container) {
+          // Check if this container has title text
+          let hasTitle = false;
+          for (let grandchild of child.children) {
+            if (grandchild instanceof Text && (grandchild.text === "MULTIPLIER" || grandchild.text === "SHUFFLE")) {
+              hasTitle = true;
+              break;
+            }
+          }
+          
+          if (hasTitle) {
+            let titleScale = 1.0;
+            let titleX = -(width / 2) + 100; // Left side positioning
+            
+            if (isMobile) {
+              titleScale = isPortrait ? 0.6 : 0.7; // Smaller on mobile
+              titleX = -(width / 2) + 50; // Closer to edge on mobile
+            } else if (isTablet) {
+              titleScale = isPortrait ? 0.8 : 0.9; // Medium on tablet
+              titleX = -(width / 2) + 80; // Medium spacing on tablet
+            } else {
+              titleScale = 1.0; // Full size on desktop
+              titleX = -(width / 2) + 120; // More spacing on desktop
+            }
+            
+            child.scale.set(titleScale);
+            child.x = titleX;
+            console.log("Game title scaled and positioned:", { scale: titleScale, x: titleX });
+            break;
+          }
+        }
       }
     }
     
@@ -619,7 +1004,6 @@ export class Shuffleboard extends Container {
       console.log("Shuffleboard: Keyboard controls cleaned up");
     }
     
-    engine().ticker.remove(this.slideUp, this);
     super.destroy();
   }
 }
