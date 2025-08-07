@@ -1,6 +1,5 @@
 import { Container, Sprite, Graphics, Text } from "pixi.js";
 import { engine } from "../app/getEngine";
-import { sound } from "@pixi/sound";
 import { stakeAPI } from "./stakeAPI";
 
 export class Shuffleboard extends Container {
@@ -761,23 +760,10 @@ export class Shuffleboard extends Container {
     
     // Play cashout sound for big wins (100x multiplier or more, or $100+ win)
     if (multiplier >= 100 || winAmount >= 100) {
-      this.playBigWinSound();
+      console.log("Big win detected - would play cashout sound");
     }
     
     console.log("Win display updated:", { winAmount, multiplier });
-  }
-
-  private playBigWinSound() {
-    try {
-      // Play the cashout sound for big wins - single play, no loop
-      sound.play("cashout", {
-        loop: false,
-        volume: 1.0
-      });
-      console.log("Playing big win sound: cashout.mp3 (single play)");
-    } catch (error) {
-      console.error("Error playing big win sound:", error);
-    }
   }
 
   private setupKeyboardControls() {

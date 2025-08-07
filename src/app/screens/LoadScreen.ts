@@ -1,9 +1,6 @@
 import { Container } from "pixi.js";
 
 export class LoadScreen extends Container {
-  /** Assets bundles required by this screen */
-  public static assetBundles = ["preload"];
-
   private loaderImage: HTMLImageElement | null = null;
 
   constructor() {
@@ -18,7 +15,7 @@ export class LoadScreen extends Container {
 
   private showStakeEngineLoader() {
     this.loaderImage = document.createElement("img");
-    this.loaderImage.src = `/assets/main/stake-engine-loader.gif`;
+    this.loaderImage.src = `/stake-engine-loader.gif`;
     this.loaderImage.style.position = "fixed";
     this.loaderImage.style.top = "0";
     this.loaderImage.style.left = "0";
@@ -29,12 +26,12 @@ export class LoadScreen extends Container {
     this.loaderImage.style.backgroundColor = "#000000";
     document.body.appendChild(this.loaderImage);
     
-    // Switch to static PNG after animation completes
+    // Switch to static PNG after animation completes (if you have a PNG version)
     setTimeout(() => {
       if (this.loaderImage) {
-        this.loaderImage.src = `/assets/main/stakeloader.png`;
+        this.loaderImage.src = `/stake-engine-loader.gif`; // Keep as GIF or change to PNG if you have one
       }
-    }, 1500); // Half of the previous 3000ms
+    }, 1500);
   }
 
   private async showOnlySpinsLoader() {
@@ -43,7 +40,7 @@ export class LoadScreen extends Container {
     
     // Show the onlyspins loader full screen
     this.loaderImage = document.createElement("img");
-    this.loaderImage.src = `/assets/main/onlyspinsloader.gif`;
+    this.loaderImage.src = `/onlyspinsloader.gif`;
     this.loaderImage.style.position = "fixed";
     this.loaderImage.style.top = "0";
     this.loaderImage.style.left = "0";
@@ -53,13 +50,6 @@ export class LoadScreen extends Container {
     this.loaderImage.style.zIndex = "1000";
     this.loaderImage.style.backgroundColor = "#000000";
     document.body.appendChild(this.loaderImage);
-    
-    // Switch to static PNG after animation completes
-    setTimeout(() => {
-      if (this.loaderImage) {
-        this.loaderImage.src = `/assets/main/onlyspinsloader.png`;
-      }
-    }, 3000); // Adjust based on actual GIF duration
     
     // Show for a bit
     await new Promise(resolve => setTimeout(resolve, 5000));

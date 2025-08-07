@@ -1,9 +1,0 @@
-{"id": 1, "events": [{}], "payoutMultiplier": 0}
-{"id": 2, "events": [{}], "payoutMultiplier": 1}
-{"id": 3, "events": [{}], "payoutMultiplier": 5}
-{"id": 4, "events": [{}], "payoutMultiplier": 10}
-{"id": 5, "events": [{}], "payoutMultiplier": 25}
-{"id": 6, "events": [{}], "payoutMultiplier": 50}
-{"id": 7, "events": [{}], "payoutMultiplier": 100}
-{"id": 8, "events": [{}], "payoutMultiplier": 500}
-{"id": 9, "events": [{}], "payoutMultiplier": 1000}

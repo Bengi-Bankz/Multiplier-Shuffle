@@ -1,5 +1,5 @@
 import type { Ticker } from "pixi.js";
-import { Assets, BigPool, Container } from "pixi.js";
+import { BigPool, Container } from "pixi.js";
 
 import type { CreationEngine } from "../engine";
 
@@ -138,15 +138,7 @@ export class Navigation {
       this.currentScreen.interactiveChildren = false;
     }
 
-    // Load assets for the new screen, if available
-    if (ctor.assetBundles) {
-      // Load all assets required by this new screen
-      await Assets.loadBundle(ctor.assetBundles, (progress) => {
-        if (this.currentScreen?.onLoad) {
-          this.currentScreen.onLoad(progress * 100);
-        }
-      });
-    }
+    // Assets are now served directly from public folder - no bundle loading needed
 
     if (this.currentScreen?.onLoad) {
       this.currentScreen.onLoad(100);

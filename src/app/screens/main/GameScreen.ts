@@ -5,9 +5,6 @@ import { Shuffleboard } from "../../../game/Shuffleboard";
 
 /** The screen that holds the shuffleboard game */
 export class GameScreen extends Container {
-  /** Assets bundles required by this screen */
-  public static assetBundles = ["main"];
-
   public mainContainer: Container;
   private shuffleboard: Shuffleboard;
   private balanceText: Text;

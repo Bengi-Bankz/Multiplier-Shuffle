@@ -3,12 +3,8 @@ import type {
   DestroyOptions,
   RendererDestroyOptions,
 } from "pixi.js";
-import { Application, Assets, extensions, ResizePlugin } from "pixi.js";
+import { Application, extensions, ResizePlugin } from "pixi.js";
 import "pixi.js/app";
-
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore - This is a dynamically generated file by AssetPack
-import manifest from "../manifest.json";
 
 import { CreationNavigationPlugin } from "./navigation/NavigationPlugin";
 import { CreationResizePlugin } from "./resize/ResizePlugin";
@@ -43,15 +39,6 @@ export class CreationEngine extends Application {
     document.getElementById("pixi-container")!.appendChild(this.canvas);
     // Add a visibility listener, so the app can pause sounds and screens
     document.addEventListener("visibilitychange", this.visibilityChange);
-
-    // Init PixiJS assets with this asset manifest
-    await Assets.init({ manifest, basePath: "assets" });
-    await Assets.loadBundle("preload");
-
-    // List all existing bundles names
-    const allBundles = manifest.bundles.map((item) => item.name);
-    // Start up background loading of all bundles
-    Assets.backgroundLoadBundle(allBundles);
   }
 
   public override destroy(
