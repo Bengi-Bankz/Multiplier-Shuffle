@@ -1,9 +1,12 @@
-import { Container, Sprite, Graphics, Text } from "pixi.js";
+import { Container, Sprite, Graphics, Text, Assets, Texture } from "pixi.js";
 import { engine } from "../app/getEngine";
 import { stakeAPI } from "./stakeAPI";
 
 export class Shuffleboard extends Container {
   private puck?: Sprite;
+  private puck2?: Sprite;
+  private currentPuckIndex: number = 0; // 0 for puck.png, 1 for puck2.png
+  private activePucks: Sprite[] = []; // Track active pucks
   private boardContainer: Container;
   private board?: Container;  // Changed from Sprite to Container
   private playbar?: Container;  // Changed from Sprite to Container
@@ -22,9 +25,6 @@ export class Shuffleboard extends Container {
   private lastWinMultiplier: number = 0;
   private keyboardHandler?: (event: KeyboardEvent) => void;
   private gameScreenRef?: any; // Reference to GameScreen for bet controls
-  private isProcessingRound: boolean = false; // Prevent multiple simultaneous plays
-  private currentRound?: any; // Current active round
-  private targetZone: number = 0; // Target zone for animation
 
   constructor() {
     super();
@@ -38,7 +38,7 @@ export class Shuffleboard extends Container {
       // Use the new UI assets instead of drawing with graphics
       this.createGameTitle(); // Add game title first
       this.createBoard();
-      this.createPuck(); // Create puck first so it's behind the playbar
+      await this.createPuck(); // Create puck first so it's behind the playbar (now async)
       this.createWinModal(); // Add win modal
       this.createPlaybar();
       this.createAutoButton(); // Create auto button
@@ -402,7 +402,7 @@ export class Shuffleboard extends Container {
     console.log("Shuffleboard: Auto button created at:", { x: autoButtonContainer.x, y: autoButtonContainer.y });
   }
 
-  private createPuck() {
+  private async createPuck() {
     // Create white circular launch pad first - make it bigger than the puck
     const launchPad = new Graphics();
     launchPad.circle(0, 0, 30); // Circle with 30px radius (bigger than puck)
@@ -412,16 +412,64 @@ export class Shuffleboard extends Container {
     launchPad.y = 443; // Position for launch pad (438 + 5px)
     this.boardContainer.addChild(launchPad);
 
-    // Use the properly sized puck.png (22x23px) and scale it down
-    this.puck = Sprite.from("puck.png");
-    this.puck.anchor.set(0.5);
-    this.puck.scale.set(0.8); // Scale down by 60% (was 2.0, now 0.8)
-    this.puck.x = 0; // Center on the board (not with the button)
-    this.puck.y = 443; // Start from bottom of the board area (438 + 5px)
-    // Remove interactivity from puck since button handles launching
+    try {
+      // Load puck textures using Assets API
+      console.log("Loading puck textures...");
 
-    this.boardContainer.addChild(this.puck);
-    console.log("Shuffleboard: Puck created on larger white launch pad:", { x: this.puck.x, y: this.puck.y, scale: this.puck.scale.x });
+      const puckTexture = await Assets.load('/puck.png');
+      const puck2Texture = await Assets.load('/puck2.png');
+
+      console.log("Textures loaded successfully");
+
+      // Create first puck with loaded texture
+      this.puck = new Sprite(puckTexture);
+      this.puck.anchor.set(0.5);
+      this.puck.scale.set(0.8);
+      this.puck.x = 0;
+      this.puck.y = 443;
+      this.boardContainer.addChild(this.puck);
+      console.log("Puck 1 created successfully");
+
+      // Create second puck with loaded texture
+      this.puck2 = new Sprite(puck2Texture);
+      this.puck2.anchor.set(0.5);
+      this.puck2.scale.set(0.8);
+      this.puck2.x = 0;
+      this.puck2.y = 443;
+      this.puck2.visible = false; // Hide initially
+      this.boardContainer.addChild(this.puck2);
+      console.log("Puck 2 created successfully");
+
+    } catch (error) {
+      console.error("Error loading puck textures:", error);
+      console.log("Creating fallback colored circles...");
+
+      // Create fallback red circle for puck 1
+      const fallbackPuck = new Graphics();
+      fallbackPuck.circle(0, 0, 15);
+      fallbackPuck.fill({ color: 0xFF0000 });
+      fallbackPuck.x = 0;
+      fallbackPuck.y = 443;
+      this.boardContainer.addChild(fallbackPuck);
+      this.puck = fallbackPuck as any;
+
+      // Create fallback blue circle for puck 2
+      const fallbackPuck2 = new Graphics();
+      fallbackPuck2.circle(0, 0, 15);
+      fallbackPuck2.fill({ color: 0x0000FF });
+      fallbackPuck2.x = 0;
+      fallbackPuck2.y = 443;
+      fallbackPuck2.visible = false;
+      this.boardContainer.addChild(fallbackPuck2);
+      this.puck2 = fallbackPuck2 as any;
+
+      console.log("Fallback pucks created (red and blue circles)");
+    }
+
+    // Initialize active pucks array
+    this.activePucks = [];
+
+    console.log("Shuffleboard: Both pucks created with alternating system");
   }
 
   private createCombinedBorder() {
@@ -497,30 +545,60 @@ export class Shuffleboard extends Container {
   }
 
   private async launchPuck() {
-    // Prevent multiple simultaneous rounds
-    if (this.isProcessingRound) {
-      console.log("Round already in progress, ignoring launch request");
+    // Allow multiple pucks to be launched without waiting
+    console.log("Launching puck - alternating system allows immediate shooting");
+
+    // Get the current puck to use (alternate between puck and puck2)
+    const currentPuck = this.currentPuckIndex === 0 ? this.puck : this.puck2;
+    if (!currentPuck) {
+      console.error("Current puck not available");
       return;
     }
 
+    // Check if current puck is available (not already in flight)
+    const isPuckInFlight = this.activePucks.includes(currentPuck);
+    if (isPuckInFlight) {
+      console.log("Current puck is in flight, switching to other puck");
+      // Switch to the other puck
+      this.currentPuckIndex = this.currentPuckIndex === 0 ? 1 : 0;
+      const alternatePuck = this.currentPuckIndex === 0 ? this.puck : this.puck2;
+      if (!alternatePuck || this.activePucks.includes(alternatePuck)) {
+        console.log("Both pucks are in flight, waiting...");
+        return;
+      }
+      // Use the alternate puck instead
+      this.launchSpecificPuck(alternatePuck);
+      return;
+    }
+
+    // Launch the current puck
+    this.launchSpecificPuck(currentPuck);
+
+    // Switch to the other puck for next launch
+    this.currentPuckIndex = this.currentPuckIndex === 0 ? 1 : 0;
+  }
+
+  private async launchSpecificPuck(puck: Sprite) {
     // Clear win modal when launching puck
     this.clearWinModal();
 
     try {
-      this.isProcessingRound = true;
+      // Add puck to active pucks list
+      this.activePucks.push(puck);
+      puck.visible = true;
 
       // Get bet amount from GameScreen
       const betAmount = this.gameScreenRef?.getBetAmount() || 1.00;
       const betAmountMicro = stakeAPI.toMicroUnits(betAmount);
 
-      console.log("Launching puck with bet:", betAmount);
+      console.log("Launching specific puck with bet:", betAmount);
 
       // Track game event
       await stakeAPI.trackEvent('puck_launch');
 
       // Call Stake API to play round
       const playResponse = await stakeAPI.play(betAmountMicro);
-      this.currentRound = playResponse.round;
+      const currentRound = playResponse.round;
 
       // Update balance in GameScreen
       if (this.gameScreenRef?.updateBalance) {
@@ -530,22 +608,27 @@ export class Shuffleboard extends Container {
 
       // Extract game result from round data
       const { multiplier, finalPosition, winAmount } = playResponse.round;
-      this.targetZone = finalPosition || 0;
+      const targetZone = finalPosition || 0;
 
       // Start puck animation to target zone
-      this.animatePuckToZone(this.targetZone, multiplier, stakeAPI.fromMicroUnits(winAmount || 0));
+      this.animateSpecificPuckToZone(puck, targetZone, multiplier, stakeAPI.fromMicroUnits(winAmount || 0), currentRound);
 
     } catch (error) {
-      console.error("Error launching puck:", error);
-      this.isProcessingRound = false;
+      console.error("Error launching specific puck:", error);
+
+      // Remove from active list on error
+      const index = this.activePucks.indexOf(puck);
+      if (index > -1) {
+        this.activePucks.splice(index, 1);
+      }
 
       // Fallback: use local simulation
-      this.simulateLocalGame();
+      this.simulateLocalGameForPuck(puck);
     }
   }
 
-  private animatePuckToZone(targetZone: number, multiplier: number, winAmount: number) {
-    if (!this.puck || !engine().ticker.started) return;
+  private animateSpecificPuckToZone(puck: Sprite, targetZone: number, multiplier: number, winAmount: number, currentRound: any) {
+    if (!puck || !engine().ticker.started) return;
 
     console.log(`Animating puck to zone ${targetZone}, multiplier: ${multiplier}x, win: $${winAmount}`);
 
@@ -565,12 +648,14 @@ export class Shuffleboard extends Container {
       multiplier: multiplier,
       winAmount: winAmount,
       duration: 2000 + Math.random() * 1000, // 2-3 seconds
-      startTime: Date.now()
+      startTime: Date.now(),
+      puck: puck,
+      round: currentRound
     };
 
     // Smooth animation function with easing
     const animatePuck = () => {
-      if (!this.puck) {
+      if (!puck || !puck.parent) {
         engine().ticker.remove(animatePuck, this);
         return;
       }
@@ -583,13 +668,13 @@ export class Shuffleboard extends Container {
 
       // Update puck position with some horizontal drift for realism
       const drift = Math.sin(progress * Math.PI * 2) * 15;
-      this.puck.y = animationData.startY + (animationData.targetY - animationData.startY) * easeProgress;
-      this.puck.x = drift;
+      puck.y = animationData.startY + (animationData.targetY - animationData.startY) * easeProgress;
+      puck.x = drift;
 
       // Animation complete
       if (progress >= 1) {
         engine().ticker.remove(animatePuck, this);
-        this.onPuckLanded(animationData.multiplier, animationData.winAmount);
+        this.onSpecificPuckLanded(puck, animationData.multiplier, animationData.winAmount, animationData.round);
       }
     };
 
@@ -597,7 +682,7 @@ export class Shuffleboard extends Container {
     engine().ticker.add(animatePuck, this);
   }
 
-  private async onPuckLanded(multiplier: number, winAmount: number) {
+  private async onSpecificPuckLanded(puck: Sprite, multiplier: number, winAmount: number, currentRound: any) {
     console.log(`Puck landed! Multiplier: ${multiplier}x, Win: $${winAmount}`);
 
     try {
@@ -608,7 +693,7 @@ export class Shuffleboard extends Container {
       this.updateWinDisplay(winAmount, multiplier);
 
       // If there's a win, we need to call endRound to complete the bet
-      if (winAmount > 0 && this.currentRound) {
+      if (winAmount > 0 && currentRound) {
         console.log("Win detected, calling endRound to complete bet...");
 
         // Add small delay for dramatic effect
@@ -632,10 +717,14 @@ export class Shuffleboard extends Container {
     } catch (error) {
       console.error("Error in puck landed handler:", error);
     } finally {
-      // Reset puck position and processing state
-      this.resetPuckPosition();
-      this.isProcessingRound = false;
-      this.currentRound = null;
+      // Reset puck position and remove from active list
+      this.resetSpecificPuckPosition(puck);
+
+      // Remove puck from active list
+      const index = this.activePucks.indexOf(puck);
+      if (index > -1) {
+        this.activePucks.splice(index, 1);
+      }
 
       // Continue auto mode if it's enabled
       if (this.isAutoMode) {
@@ -643,20 +732,21 @@ export class Shuffleboard extends Container {
           if (this.isAutoMode) { // Check again in case auto was turned off
             this.launchPuck();
           }
-        }, 500); // 500ms delay between auto shots
+        }, 100); // Shorter delay for rapid fire mode
       }
     }
   }
 
-  private resetPuckPosition() {
-    if (this.puck) {
-      this.puck.x = 0;
-      this.puck.y = 443; // Launch pad position
+  private resetSpecificPuckPosition(puck: Sprite) {
+    if (puck) {
+      puck.x = 0;
+      puck.y = 443; // Launch pad position
+      // Don't hide the puck, keep it visible for next launch
     }
   }
 
-  private simulateLocalGame() {
-    console.log("Using local game simulation");
+  private simulateLocalGameForPuck(puck: Sprite) {
+    console.log("Using local game simulation for specific puck");
 
     // Define multiplier zones (same as createBoard)
     const multiplierZones = [0, 1000, 0, 500, 100, 25, 10, 5, 1, 0, 0, 0]; // Skip DROP zone
@@ -666,7 +756,7 @@ export class Shuffleboard extends Container {
     const winAmount = betAmount * multiplier;
 
     // Animate to the randomly selected zone
-    this.animatePuckToZone(randomZone, multiplier, winAmount);
+    this.animateSpecificPuckToZone(puck, randomZone, multiplier, winAmount, null);
   }
 
   private clearWinModal() {
