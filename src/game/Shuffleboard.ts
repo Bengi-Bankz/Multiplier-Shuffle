@@ -1,30 +1,28 @@
-import { Container, Sprite, Graphics, Text, Assets, Texture } from "pixi.js";
+import { Container, Sprite, Graphics, Text, Assets } from "pixi.js";
 import { engine } from "../app/getEngine";
 import { stakeAPI } from "./stakeAPI";
 
 export class Shuffleboard extends Container {
-  private puck?: Sprite;
-  private puck2?: Sprite;
+  private puckTexture?: any; // Store loaded texture
+  private puck2Texture?: any; // Store loaded texture
   private currentPuckIndex: number = 0; // 0 for puck.png, 1 for puck2.png
   private activePucks: Sprite[] = []; // Track active pucks
   private boardContainer: Container;
   private board?: Container;  // Changed from Sprite to Container
+  private buttonPanel?: Container;  // New container for all UI buttons
   private playbar?: Container;  // Changed from Sprite to Container
   private autoButton?: Container;  // Auto button container
-  private winModal?: Container;  // Win display modal
-  private winAmountText?: Text;  // Reference to win amount text
-  private multiplierText?: Text;  // Reference to multiplier text
-  private welcomeTitleText?: Text;  // Reference to welcome title text
-  private welcomeInstructionText?: Text;  // Reference to welcome instruction text
-  private welcomeStatsText?: Text;  // Reference to welcome stats text
-  private winTitleText?: Text;  // Reference to "LAST WIN" title text
+  private turboButton?: Container; // Turbo button container
   private boardBorder?: Graphics;
   private isAutoMode: boolean = false;
+  private isTurboMode: boolean = false;
   private autoInterval?: number;
-  private lastWinAmount: number = 0;
-  private lastWinMultiplier: number = 0;
   private keyboardHandler?: (event: KeyboardEvent) => void;
+  private clickHandler?: (event: PointerEvent) => void; // Global click handler for menu
+  private clickHandlerActive: boolean = false; // Track if click handler should be active
   private gameScreenRef?: any; // Reference to GameScreen for bet controls
+  private menuDropdown?: Container; // Dropdown menu container
+  private isMenuOpen: boolean = false; // Track menu state
 
   constructor() {
     super();
@@ -36,14 +34,19 @@ export class Shuffleboard extends Container {
     try {
       console.log("Shuffleboard: Starting initialization");
       // Use the new UI assets instead of drawing with graphics
-      this.createGameTitle(); // Add game title first
       this.createBoard();
       await this.createPuck(); // Create puck first so it's behind the playbar (now async)
-      this.createWinModal(); // Add win modal
-      this.createPlaybar();
-      this.createAutoButton(); // Create auto button
+      this.createButtonPanel(); // Create the polished button panel
       this.createCombinedBorder();
       this.setupKeyboardControls(); // Add keyboard controls
+      this.setupGlobalClickHandler(); // Add global click handler for menu
+
+      // Initialize controls state
+      this.updateControlsState();
+
+      // Initialize win display with default values
+      this.updatePanelWinDisplay(0, 0);
+
       console.log("Shuffleboard: Initialization completed successfully");
     } catch (error) {
       console.error("Shuffleboard: Error during initialization:", error);
@@ -121,181 +124,182 @@ export class Shuffleboard extends Container {
     }
   }
 
-  private createGameTitle() {
-    try {
-      console.log("Shuffleboard: Creating game title");
+  private createButtonPanel() {
+    console.log("Shuffleboard: Creating polished button panel");
 
-      // Create container for the title words
-      const titleContainer = new Container();
+    // Create main button panel container
+    this.buttonPanel = new Container();
 
-      // Split title into words and create each on its own row
-      const words = ["MULTIPLIER", "SHUFFLE"];
-      const wordSpacing = 80; // Vertical spacing between words
+    // Panel background with rounded corners and semi-transparent background
+    const panelBg = new Graphics();
+    const panelWidth = 220;
+    const panelHeight = 600; // Increased height to accommodate both AUTO and TURBO buttons
+    panelBg.roundRect(-panelWidth / 2, -panelHeight / 2, panelWidth, panelHeight, 20);
+    panelBg.fill({ color: 0x000000, alpha: 0.8 }); // Semi-transparent black
+    panelBg.stroke({ color: 0x87CEEB, width: 3 }); // Baby blue border
+    this.buttonPanel.addChild(panelBg);
 
-      words.forEach((word, index) => {
-        // Create the word text
-        const wordText = new Text(word, {
-          fontSize: 48, // Smaller font size for side placement
-          fontWeight: 'bold',
-          fill: 0x87CEEB, // Baby blue color
-          align: 'left',
-          fontFamily: 'Arial, sans-serif'
-        });
+    // Button configuration with improved spacing
+    const buttonConfig = {
+      width: 180,
+      height: 50,
+      spacing: 70, // Adjusted spacing for 5 buttons
+      cornerRadius: 12
+    };
 
-        wordText.anchor.set(0, 0.5); // Left-aligned, center vertically
-        wordText.x = 0;
-        wordText.y = index * wordSpacing - (wordSpacing / 2); // Center the group vertically
+    let currentY = -250; // Start higher to accommodate increased panel height
 
-        // Create shadow for each word
-        const wordShadow = new Text(word, {
-          fontSize: 48,
-          fontWeight: 'bold',
-          fill: 0x000000, // Black shadow
-          align: 'left',
-          fontFamily: 'Arial, sans-serif'
-        });
+    // 1. LAUNCH Button (Main action)
+    this.playbar = this.createStyledButton({
+      text: "LAUNCH",
+      x: 0,
+      y: currentY,
+      width: buttonConfig.width,
+      height: buttonConfig.height,
+      backgroundColor: 0x4CAF50, // Green
+      hoverColor: 0x45A049, // Darker green
+      fontSize: 24,
+      fontWeight: 'bold',
+      cornerRadius: buttonConfig.cornerRadius,
+      onClick: () => {
+        // Check if controls are disabled before launching
+        if (this.gameScreenRef?.isControlsDisabled && this.gameScreenRef.isControlsDisabled()) {
+          console.log("Launch button clicked but controls disabled - bet exceeds balance");
+          return;
+        }
 
-        wordShadow.anchor.set(0, 0.5);
-        wordShadow.x = 2; // Slightly offset for shadow effect
-        wordShadow.y = (index * wordSpacing - (wordSpacing / 2)) + 2; // Slightly offset for shadow effect
-        wordShadow.alpha = 0.3; // Make shadow semi-transparent
+        if (!this.isAutoMode && !this.isTurboMode) {
+          this.launchPuck();
+        }
+      }
+    });
+    this.buttonPanel.addChild(this.playbar);
+    currentY += buttonConfig.spacing;
 
-        // Add shadow first, then word (so word appears on top)
-        titleContainer.addChild(wordShadow);
-        titleContainer.addChild(wordText);
-      });
+    // 2. BET Controls Container (with extra spacing)
+    const betContainer = this.createBetControls(0, currentY);
+    this.buttonPanel.addChild(betContainer);
+    currentY += buttonConfig.spacing + 10; // Extra spacing after bet controls for visual separation
 
-      // Position title container on the left side
-      titleContainer.x = -400; // Left side position (will be adjusted in resize)
-      titleContainer.y = -200; // Upper area
+    // 3. AUTO Button (Half speed mode)
+    this.autoButton = this.createStyledButton({
+      text: "AUTO",
+      x: 0,
+      y: currentY,
+      width: buttonConfig.width,
+      height: buttonConfig.height,
+      backgroundColor: 0x2196F3, // Blue when inactive
+      hoverColor: 0x42A5F5,
+      fontSize: 20,
+      fontWeight: 'bold',
+      cornerRadius: buttonConfig.cornerRadius,
+      onClick: (button, buttonText) => {
+        // Check if controls are disabled before toggling auto
+        if (this.gameScreenRef?.isControlsDisabled && this.gameScreenRef.isControlsDisabled()) {
+          console.log("Auto button clicked but controls disabled - bet exceeds balance");
+          return;
+        }
 
-      this.boardContainer.addChild(titleContainer);
+        this.toggleAutoMode(button!, buttonText!);
+      }
+    });
+    this.buttonPanel.addChild(this.autoButton);
+    currentY += buttonConfig.spacing;
 
-      console.log("Shuffleboard: Game title created on left side at:", { x: titleContainer.x, y: titleContainer.y });
-    } catch (error) {
-      console.error("Shuffleboard: Error creating game title:", error);
-    }
+    // 4. TURBO Button (Ultra fast mode)
+    this.turboButton = this.createStyledButton({
+      text: "TURBO",
+      x: 0,
+      y: currentY,
+      width: buttonConfig.width,
+      height: buttonConfig.height,
+      backgroundColor: 0xFF9800, // Orange when inactive
+      hoverColor: 0xFFB74D,
+      fontSize: 20,
+      fontWeight: 'bold',
+      cornerRadius: buttonConfig.cornerRadius,
+      onClick: (button, buttonText) => {
+        // Check if controls are disabled before toggling turbo
+        if (this.gameScreenRef?.isControlsDisabled && this.gameScreenRef.isControlsDisabled()) {
+          console.log("Turbo button clicked but controls disabled - bet exceeds balance");
+          return;
+        }
+
+        this.toggleTurboMode(button!, buttonText!);
+      }
+    });
+    this.buttonPanel.addChild(this.turboButton);
+    currentY += buttonConfig.spacing;
+
+    // 5. Menu Button
+    const menuButton = this.createStyledButton({
+      text: "MENU",
+      x: 0,
+      y: currentY,
+      width: buttonConfig.width,
+      height: buttonConfig.height,
+      backgroundColor: 0x795548, // Brown
+      hoverColor: 0x5D4037, // Darker brown
+      fontSize: 18,
+      fontWeight: 'bold',
+      cornerRadius: buttonConfig.cornerRadius,
+      onClick: () => {
+        console.log("🔧 DEBUG: Menu button clicked!");
+        this.toggleMenuDropdown();
+      }
+    });
+    this.buttonPanel.addChild(menuButton);
+    currentY += buttonConfig.spacing + 20; // Extra spacing before win display
+
+    // 6. Win Display Area
+    const winDisplayContainer = this.createWinDisplay(0, currentY);
+    this.buttonPanel.addChild(winDisplayContainer);
+
+    // Position the panel on the right side (will be adjusted in resize)
+    this.buttonPanel.x = 400; // Initial position, will be updated in resize
+    this.buttonPanel.y = 0;
+
+    // Add the button panel to the main container
+    this.addChild(this.buttonPanel);
+
+    // Initialize button states
+    this.updateLaunchButtonState();
+    this.updateAutoButtonState();
+    this.updateTurboButtonState();
+
+    console.log("Shuffleboard: Polished button panel created with 5 buttons (LAUNCH, BET, AUTO, TURBO, MENU) and win display area");
   }
 
-  private createWinModal() {
-    try {
-      console.log("Shuffleboard: Creating win modal");
-
-      // Create win modal container
-      this.winModal = new Container();
-
-      // Modal background with rounded rectangle - make it wider for more content
-      const modalBg = new Graphics();
-      const modalWidth = 350;
-      const modalHeight = 160;
-      modalBg.roundRect(-modalWidth / 2, -modalHeight / 2, modalWidth, modalHeight, 15);
-      modalBg.fill({ color: 0x000000, alpha: 0.8 }); // Semi-transparent black background
-      modalBg.stroke({ color: 0x87CEEB, width: 3 }); // Baby blue border
-
-      // Title text - show loading message initially
-      this.welcomeTitleText = new Text("WELCOME TO MULTIPLIER SHUFFLE", {
-        fontSize: 18,
-        fontWeight: 'bold',
-        fill: 0x87CEEB, // Baby blue color
-        align: 'center',
-        fontFamily: 'Arial, sans-serif'
-      });
-      this.welcomeTitleText.anchor.set(0.5);
-      this.welcomeTitleText.x = 0;
-      this.welcomeTitleText.y = -55;
-
-      // Loading instruction
-      this.welcomeInstructionText = new Text("Click LAUNCH to send puck\nto multiplier heaven!", {
-        fontSize: 16,
-        fill: 0xFFFFFF, // White color
-        align: 'center',
-        fontFamily: 'Arial, sans-serif'
-      });
-      this.welcomeInstructionText.anchor.set(0.5);
-      this.welcomeInstructionText.x = 0;
-      this.welcomeInstructionText.y = -20;
-
-      // Game stats
-      this.welcomeStatsText = new Text("Max Win: 1000X  •  RTP: 98%", {
-        fontSize: 14,
-        fontWeight: 'bold',
-        fill: 0x87CEEB, // Baby blue color
-        align: 'center',
-        fontFamily: 'Arial, sans-serif'
-      });
-      this.welcomeStatsText.anchor.set(0.5);
-      this.welcomeStatsText.x = 0;
-      this.welcomeStatsText.y = 15;
-
-      // Win amount text (initially hidden)
-      this.winAmountText = new Text(`$${this.lastWinAmount.toFixed(2)}`, {
-        fontSize: 28,
-        fontWeight: 'bold',
-        fill: 0x87CEEB, // Baby blue color
-        align: 'center',
-        fontFamily: 'Arial, sans-serif'
-      });
-      this.winAmountText.anchor.set(0.5);
-      this.winAmountText.x = 0;
-      this.winAmountText.y = -10;
-      this.winAmountText.visible = false; // Hidden initially
-
-      // Multiplier text (initially hidden)
-      this.multiplierText = new Text(`${this.lastWinMultiplier}x`, {
-        fontSize: 22,
-        fontWeight: 'bold',
-        fill: 0x87CEEB, // Baby blue color
-        align: 'center',
-        fontFamily: 'Arial, sans-serif'
-      });
-      this.multiplierText.anchor.set(0.5);
-      this.multiplierText.x = 0;
-      this.multiplierText.y = 25;
-      this.multiplierText.visible = false; // Hidden initially
-
-      // Add all elements to modal container
-      this.winModal.addChild(modalBg);
-      this.winModal.addChild(this.welcomeTitleText);
-      this.winModal.addChild(this.welcomeInstructionText);
-      this.winModal.addChild(this.welcomeStatsText);
-      this.winModal.addChild(this.winAmountText);
-      this.winModal.addChild(this.multiplierText);
-
-      // Position at top of board (will be repositioned in resize)
-      this.winModal.x = 0; // Center horizontally with board
-      this.winModal.y = -400; // Move higher up from board area
-
-      this.boardContainer.addChild(this.winModal);
-
-      console.log("Shuffleboard: Win modal created at top of board:", { x: this.winModal.x, y: this.winModal.y });
-    } catch (error) {
-      console.error("Shuffleboard: Error creating win modal:", error);
-    }
-  }
-
-  private createPlaybar() {
-    // Create a custom button instead of using playbar.png sprite
-    const buttonWidth = 200;
-    const buttonHeight = 60;
-
-    // Create button container
+  private createStyledButton(config: {
+    text: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    backgroundColor: number;
+    hoverColor: number;
+    fontSize: number;
+    fontWeight: string;
+    cornerRadius: number;
+    onClick: (button?: Graphics, buttonText?: Text) => void;
+  }): Container {
     const buttonContainer = new Container();
-    // Initial position - will be updated in resize
-    buttonContainer.x = 400;
-    buttonContainer.y = 200;
+    buttonContainer.x = config.x;
+    buttonContainer.y = config.y;
 
     // Create button background
     const button = new Graphics();
-    button.roundRect(-buttonWidth / 2, -buttonHeight / 2, buttonWidth, buttonHeight, 12);
-    button.fill({ color: 0x4CAF50 }); // Green background
+    button.roundRect(-config.width / 2, -config.height / 2, config.width, config.height, config.cornerRadius);
+    button.fill({ color: config.backgroundColor });
     button.stroke({ color: 0xFFFFFF, width: 2 }); // White border
 
     // Create button text
-    const buttonText = new Text("LAUNCH", {
-      fontSize: 24,
-      fontWeight: 'bold',
+    const buttonText = new Text(config.text, {
+      fontSize: config.fontSize,
+      fontWeight: config.fontWeight as any,
       fill: 0xFFFFFF, // White text
-      align: 'center'
+      align: 'center',
+      fontFamily: 'Arial, sans-serif'
     });
     buttonText.anchor.set(0.5);
     buttonText.x = 0;
@@ -305,101 +309,846 @@ export class Shuffleboard extends Container {
     buttonContainer.addChild(button);
     buttonContainer.addChild(buttonText);
 
+    // Store initial state color for hover effects
+    (button as any)._currentStateColor = config.backgroundColor;
+
     // Make button interactive
     buttonContainer.interactive = true;
     buttonContainer.cursor = "pointer";
 
-    // Add click handler to launch the puck
+    // Add click handler
     buttonContainer.on("pointerdown", () => {
-      // Only allow manual launch if auto mode is off
-      if (!this.isAutoMode) {
-        this.launchPuck();
+      console.log("🔧 DEBUG: Button clicked, disabled state:", (buttonContainer as any)._isDisabled);
+      // Don't execute click if button is disabled
+      if ((buttonContainer as any)._isDisabled) {
+        console.log("🔧 DEBUG: Button click blocked - button is disabled");
+        return;
       }
+      console.log("🔧 DEBUG: Executing onClick callback");
+      config.onClick(button, buttonText);
     });
 
     // Add hover effects
     buttonContainer.on("pointerover", () => {
+      // Don't show hover effects if button is disabled
+      if ((buttonContainer as any)._isDisabled) {
+        return;
+      }
+
+      // Get current background color instead of using config.hoverColor always
+      const currentColor = (button as any)._fillStyle?.color || config.backgroundColor;
+      const hoverColor = currentColor === 0x2196F3 ? 0x42A5F5 : // Blue -> light blue
+        currentColor === 0x32CD32 ? 0x00FF00 : // Green -> bright green (auto active)
+          currentColor === 0xFF9800 ? 0xFFB74D : // Orange -> light orange
+            currentColor === 0xFF1744 ? 0xFF5722 : // Red -> light red (turbo active)
+              config.hoverColor; // Fallback to original hover color
+
       button.clear();
-      button.roundRect(-buttonWidth / 2, -buttonHeight / 2, buttonWidth, buttonHeight, 12);
-      button.fill({ color: 0x45A049 }); // Darker green on hover
+      button.roundRect(-config.width / 2, -config.height / 2, config.width, config.height, config.cornerRadius);
+      button.fill({ color: hoverColor });
       button.stroke({ color: 0x00AFF0, width: 3 }); // Blue border on hover
     });
 
     buttonContainer.on("pointerout", () => {
+      // Don't change appearance if button is disabled
+      if ((buttonContainer as any)._isDisabled) {
+        return;
+      }
+
+      // Restore the current state color, not the original config color
+      const currentColor = (button as any)._currentStateColor || config.backgroundColor;
       button.clear();
-      button.roundRect(-buttonWidth / 2, -buttonHeight / 2, buttonWidth, buttonHeight, 12);
-      button.fill({ color: 0x4CAF50 }); // Normal green
+      button.roundRect(-config.width / 2, -config.height / 2, config.width, config.height, config.cornerRadius);
+      button.fill({ color: currentColor });
       button.stroke({ color: 0xFFFFFF, width: 2 }); // White border normally
     });
 
-    // Store reference as playbar for compatibility
-    this.playbar = buttonContainer;
-    this.boardContainer.addChild(buttonContainer);
-
-    console.log("Shuffleboard: Custom launch button created at:", { x: buttonContainer.x, y: buttonContainer.y });
+    return buttonContainer;
   }
 
-  private createAutoButton() {
-    // Create auto button similar to launch button but smaller
-    const buttonWidth = 160;
-    const buttonHeight = 50;
+  private createBetControls(x: number, y: number): Container {
+    const betContainer = new Container();
+    betContainer.x = x;
+    betContainer.y = y;
 
-    // Create button container
-    const autoButtonContainer = new Container();
-    // Initial position - will be updated in resize (positioned below launch button)
-    autoButtonContainer.x = 500;
-    autoButtonContainer.y = 280; // Below the launch button
+    // Bet controls background
+    const betBg = new Graphics();
+    betBg.roundRect(-90, -35, 180, 70, 10);
+    betBg.fill({ color: 0x333333, alpha: 0.9 });
+    betBg.stroke({ color: 0x87CEEB, width: 2 });
+    betContainer.addChild(betBg);
 
-    // Create button background
-    const button = new Graphics();
-    button.roundRect(-buttonWidth / 2, -buttonHeight / 2, buttonWidth, buttonHeight, 10);
-    button.fill({ color: this.isAutoMode ? 0xFF6B35 : 0x2196F3 }); // Orange when active, blue when inactive
-    button.stroke({ color: 0xFFFFFF, width: 2 }); // White border
-
-    // Create button text
-    const buttonText = new Text(this.isAutoMode ? "AUTO ON" : "AUTO OFF", {
+    // Bet amount display
+    const betAmountText = new Text("$1.00", {
       fontSize: 20,
       fontWeight: 'bold',
-      fill: 0xFFFFFF, // White text
+      fill: 0x87CEEB,
+      align: 'center',
+      fontFamily: 'Arial, sans-serif'
+    });
+    betAmountText.anchor.set(0.5);
+    betAmountText.x = 0;
+    betAmountText.y = -15;
+    betContainer.addChild(betAmountText);
+
+    // Store reference to bet text for keyboard controls
+    (this as any).betAmountText = betAmountText;
+
+    // Label
+    const betLabel = new Text("BET", {
+      fontSize: 12,
+      fill: 0xCCCCCC,
+      align: 'center',
+      fontFamily: 'Arial, sans-serif'
+    });
+    betLabel.anchor.set(0.5);
+    betLabel.x = 0;
+    betLabel.y = 15;
+    betContainer.addChild(betLabel);
+
+    // Decrease button
+    const decreaseBtn = new Graphics();
+    decreaseBtn.circle(-50, 0, 15);
+    decreaseBtn.fill({ color: 0xFF5722 });
+    decreaseBtn.stroke({ color: 0xFFFFFF, width: 2 });
+
+    const decreaseText = new Text("-", {
+      fontSize: 24,
+      fontWeight: 'bold',
+      fill: 0xFFFFFF,
       align: 'center'
     });
-    buttonText.anchor.set(0.5);
-    buttonText.x = 0;
-    buttonText.y = 0;
+    decreaseText.anchor.set(0.5);
+    decreaseText.x = -50;
+    decreaseText.y = 0;
 
-    // Add elements to button container
-    autoButtonContainer.addChild(button);
-    autoButtonContainer.addChild(buttonText);
+    betContainer.addChild(decreaseBtn);
+    betContainer.addChild(decreaseText);
 
-    // Make button interactive
-    autoButtonContainer.interactive = true;
-    autoButtonContainer.cursor = "pointer";
+    // Increase button
+    const increaseBtn = new Graphics();
+    increaseBtn.circle(50, 0, 15);
+    increaseBtn.fill({ color: 0x4CAF50 });
+    increaseBtn.stroke({ color: 0xFFFFFF, width: 2 });
 
-    // Add click handler to toggle auto mode
-    autoButtonContainer.on("pointerdown", () => {
-      this.toggleAutoMode(button, buttonText);
+    const increaseText = new Text("+", {
+      fontSize: 20,
+      fontWeight: 'bold',
+      fill: 0xFFFFFF,
+      align: 'center'
+    });
+    increaseText.anchor.set(0.5);
+    increaseText.x = 50;
+    increaseText.y = 0;
+
+    betContainer.addChild(increaseBtn);
+    betContainer.addChild(increaseText);
+
+    // Store references for updating disabled state
+    (this as any).betDecreaseBtn = decreaseBtn;
+    (this as any).betIncreaseBtn = increaseBtn;
+    (this as any).betDecreaseText = decreaseText;
+    (this as any).betIncreaseText = increaseText;
+
+    // Make buttons interactive
+    const decreaseContainer = new Container();
+    decreaseContainer.addChild(decreaseBtn);
+    decreaseContainer.addChild(decreaseText);
+    decreaseContainer.interactive = true;
+    decreaseContainer.cursor = "pointer";
+    decreaseContainer.on("pointerdown", () => {
+      // Check if controls are disabled
+      if (this.gameScreenRef?.isControlsDisabled && this.gameScreenRef.isControlsDisabled()) {
+        console.log("Bet controls disabled - bet exceeds balance");
+        return;
+      }
+
+      if (this.gameScreenRef?.decreaseBet) {
+        this.gameScreenRef.decreaseBet();
+        // Update display
+        const newBet = this.gameScreenRef.getBetAmount() || 1.00;
+        betAmountText.text = `$${newBet.toFixed(2)}`;
+        // Update controls state after bet change
+        this.updateControlsState();
+      }
     });
 
-    // Add hover effects
-    autoButtonContainer.on("pointerover", () => {
-      button.clear();
-      button.roundRect(-buttonWidth / 2, -buttonHeight / 2, buttonWidth, buttonHeight, 10);
-      button.fill({ color: this.isAutoMode ? 0xFF8C69 : 0x42A5F5 }); // Lighter shade on hover
-      button.stroke({ color: 0x00AFF0, width: 3 }); // Blue border on hover
+    const increaseContainer = new Container();
+    increaseContainer.addChild(increaseBtn);
+    increaseContainer.addChild(increaseText);
+    increaseContainer.interactive = true;
+    increaseContainer.cursor = "pointer";
+    increaseContainer.on("pointerdown", () => {
+      // Check if controls are disabled
+      if (this.gameScreenRef?.isControlsDisabled && this.gameScreenRef.isControlsDisabled()) {
+        console.log("Bet controls disabled - bet exceeds balance");
+        return;
+      }
+
+      if (this.gameScreenRef?.increaseBet) {
+        this.gameScreenRef.increaseBet();
+        // Update display
+        const newBet = this.gameScreenRef.getBetAmount() || 1.00;
+        betAmountText.text = `$${newBet.toFixed(2)}`;
+        // Update controls state after bet change
+        this.updateControlsState();
+      }
     });
 
-    autoButtonContainer.on("pointerout", () => {
-      button.clear();
-      button.roundRect(-buttonWidth / 2, -buttonHeight / 2, buttonWidth, buttonHeight, 10);
-      button.fill({ color: this.isAutoMode ? 0xFF6B35 : 0x2196F3 }); // Normal color
-      button.stroke({ color: 0xFFFFFF, width: 2 }); // White border normally
+    betContainer.addChild(decreaseContainer);
+    betContainer.addChild(increaseContainer);
+
+    // Store references for disabled state management
+    (this as any).betDecreaseContainer = decreaseContainer;
+    (this as any).betIncreaseContainer = increaseContainer;
+
+    return betContainer;
+  }
+
+  private createWinDisplay(x: number, y: number): Container {
+    const winContainer = new Container();
+    winContainer.x = x;
+    winContainer.y = y;
+
+    // Win display background
+    const winBg = new Graphics();
+    winBg.roundRect(-90, -45, 180, 90, 10);
+    winBg.fill({ color: 0x1a1a1a, alpha: 0.9 }); // Dark background
+    winBg.stroke({ color: 0xFFD700, width: 2 }); // Gold border
+    winContainer.addChild(winBg);
+
+    // "LAST WIN" title
+    const winTitle = new Text("LAST WIN", {
+      fontSize: 14,
+      fontWeight: 'bold',
+      fill: 0xFFD700, // Gold color
+      align: 'center',
+      fontFamily: 'Arial, sans-serif'
+    });
+    winTitle.anchor.set(0.5);
+    winTitle.x = 0;
+    winTitle.y = -25;
+    winContainer.addChild(winTitle);
+
+    // Win amount display
+    const winAmountText = new Text("$0.00", {
+      fontSize: 18,
+      fontWeight: 'bold',
+      fill: 0x00FF00, // Green for win amount
+      align: 'center',
+      fontFamily: 'Arial, sans-serif'
+    });
+    winAmountText.anchor.set(0.5);
+    winAmountText.x = 0;
+    winAmountText.y = -5;
+    winContainer.addChild(winAmountText);
+
+    // Multiplier display
+    const multiplierText = new Text("0x", {
+      fontSize: 16,
+      fontWeight: 'bold',
+      fill: 0x87CEEB, // Baby blue for multiplier
+      align: 'center',
+      fontFamily: 'Arial, sans-serif'
+    });
+    multiplierText.anchor.set(0.5);
+    multiplierText.x = 0;
+    multiplierText.y = 15;
+    winContainer.addChild(multiplierText);
+
+    // Store references for updating
+    (this as any).panelWinAmountText = winAmountText;
+    (this as any).panelMultiplierText = multiplierText;
+    (this as any).winDisplayContainer = winContainer;
+
+    return winContainer;
+  }
+
+  private toggleMenuDropdown() {
+    console.log("🔧 DEBUG: toggleMenuDropdown called, isMenuOpen:", this.isMenuOpen);
+    if (this.isMenuOpen) {
+      this.closeMenuDropdown();
+    } else {
+      this.openMenuDropdown();
+    }
+  }
+
+  private openMenuDropdown() {
+    console.log("🔧 DEBUG: openMenuDropdown called");
+    if (this.menuDropdown) {
+      this.closeMenuDropdown(); // Close existing menu first
+    }
+
+    // Temporarily disable global click handler
+    this.clickHandlerActive = false;
+
+    this.isMenuOpen = true;
+    this.menuDropdown = this.createMenuDropdown();
+    console.log("🔧 DEBUG: menuDropdown created:", this.menuDropdown);
+
+    // Position dropdown over the win display area
+    this.menuDropdown.x = 0;
+    this.menuDropdown.y = 90; // Position higher up (was 115)
+
+    this.buttonPanel!.addChild(this.menuDropdown);
+    console.log("🔧 DEBUG: menuDropdown added to buttonPanel");
+    console.log("Menu dropdown opened");
+
+    // Enable global click handler after a short delay to prevent immediate closure
+    setTimeout(() => {
+      this.clickHandlerActive = true;
+      console.log("🔧 DEBUG: Global click handler now active for menu");
+    }, 200);
+  }
+
+  private closeMenuDropdown() {
+    if (this.menuDropdown && this.buttonPanel) {
+      this.buttonPanel.removeChild(this.menuDropdown);
+      this.menuDropdown.destroy();
+      this.menuDropdown = undefined;
+      this.isMenuOpen = false;
+      this.clickHandlerActive = false; // Disable click handler when menu is closed
+      console.log("Menu dropdown closed");
+    }
+  }
+
+  private createMenuDropdown(): Container {
+    console.log("🔧 DEBUG: createMenuDropdown called");
+    const dropdown = new Container();
+
+    // Dropdown background - overlay style
+    const dropdownBg = new Graphics();
+    const dropdownWidth = 220; // Slightly wider to match button panel width
+    const dropdownHeight = 275; // Taller to ensure Exit option fits (was 250)
+
+    // Add shadow effect first
+    const shadow = new Graphics();
+    shadow.roundRect(-dropdownWidth / 2 + 3, 3, dropdownWidth, dropdownHeight, 8);
+    shadow.fill({ color: 0x000000, alpha: 0.4 }); // Shadow
+    dropdown.addChild(shadow);
+
+    // Main dropdown background
+    dropdownBg.roundRect(-dropdownWidth / 2, 0, dropdownWidth, dropdownHeight, 8);
+    dropdownBg.fill({ color: 0x1a1a1a, alpha: 0.98 }); // Almost solid dark background
+    dropdownBg.stroke({ color: 0x87CEEB, width: 3 }); // Thicker baby blue border
+    dropdown.addChild(dropdownBg);
+
+    console.log("🔧 DEBUG: Dropdown background created with size:", dropdownWidth, "x", dropdownHeight);
+
+    // Menu items configuration
+    const menuItems = [
+      { text: "Game Info", action: () => this.showGameInfo() },
+      { text: "RTP/Odds", action: () => this.showRTPOdds() },
+      { text: "History", action: () => this.showHistory() },
+      { text: "Exit", action: () => this.handleExit() }
+    ];
+
+    // Create menu items
+    const itemHeight = 55; // Slightly taller items
+    const itemSpacing = 8; // More spacing between items
+
+    menuItems.forEach((item, index) => {
+      const itemContainer = new Container();
+      const yPos = (index * (itemHeight + itemSpacing)) + 15; // Start from top with small margin
+
+      // Item background (for hover effect)
+      const itemBg = new Graphics();
+      itemBg.roundRect(-dropdownWidth / 2 + 8, 0, dropdownWidth - 16, itemHeight - 2, 6);
+      itemBg.fill({ color: 0x333333, alpha: 0.8 });
+      itemContainer.addChild(itemBg);
+
+      // Item text
+      const itemText = new Text(item.text, {
+        fontSize: 16,
+        fontWeight: 'bold',
+        fill: 0xFFFFFF,
+        align: 'center',
+        fontFamily: 'Arial, sans-serif'
+      });
+      itemText.anchor.set(0.5);
+      itemText.x = 0;
+      itemText.y = itemHeight / 2;
+      itemContainer.addChild(itemText);
+
+      // Position item
+      itemContainer.x = 0;
+      itemContainer.y = yPos;
+
+      // Make item interactive
+      itemContainer.interactive = true;
+      itemContainer.cursor = "pointer";
+
+      // Add hover effects
+      itemContainer.on("pointerover", () => {
+        itemBg.clear();
+        itemBg.roundRect(-dropdownWidth / 2 + 8, 0, dropdownWidth - 16, itemHeight - 2, 6);
+        itemBg.fill({ color: 0x4a4a4a, alpha: 0.9 }); // Lighter on hover
+        itemText.style.fill = 0x87CEEB; // Baby blue text on hover
+      });
+
+      itemContainer.on("pointerout", () => {
+        itemBg.clear();
+        itemBg.roundRect(-dropdownWidth / 2 + 8, 0, dropdownWidth - 16, itemHeight - 2, 6);
+        itemBg.fill({ color: 0x333333, alpha: 0.8 }); // Original color
+        itemText.style.fill = 0xFFFFFF; // White text normally
+      });
+
+      // Add click handler
+      itemContainer.on("pointerdown", () => {
+        this.closeMenuDropdown(); // Close menu first
+        item.action(); // Then execute action
+      });
+
+      dropdown.addChild(itemContainer);
     });
 
-    // Store reference
-    this.autoButton = autoButtonContainer;
-    this.boardContainer.addChild(autoButtonContainer);
+    console.log("🔧 DEBUG: createMenuDropdown finished, returning dropdown with", dropdown.children.length, "children");
+    return dropdown;
+  }
 
-    console.log("Shuffleboard: Auto button created at:", { x: autoButtonContainer.x, y: autoButtonContainer.y });
+  private showGameInfo() {
+    console.log("📋 Game Info selected");
+    this.createModal("Game Information", this.getGameInfoContent());
+  }
+
+  private showRTPOdds() {
+    console.log("📊 RTP/Odds selected");
+    this.createModal("RTP & Odds Information", this.getRTPOddsContent());
+  }
+
+  private showHistory() {
+    console.log("📈 History selected");
+    this.createModal("Game History", this.getHistoryContent());
+  }
+
+  private handleExit() {
+    console.log("🚪 Exit selected");
+    const confirmExit = confirm("Are you sure you want to exit the game?");
+    if (confirmExit) {
+      // TODO: Implement proper exit logic - could navigate to main menu
+      console.log("User confirmed exit");
+      // For now, just reload the page
+      window.location.reload();
+    }
+  }
+
+  private createModal(title: string, content: Container) {
+    // Create modal overlay
+    const modalOverlay = new Container();
+    modalOverlay.name = "modalOverlay";
+
+    // Get actual viewport dimensions
+    const screenWidth = window.innerWidth;
+    const screenHeight = window.innerHeight;
+
+    // Modal dimensions (50% of viewport)
+    const modalWidth = screenWidth * 0.5;
+    const modalHeight = screenHeight * 0.5;
+
+    // Background overlay (covers entire viewport)
+    const overlay = new Graphics();
+    overlay.rect(0, 0, screenWidth, screenHeight);
+    overlay.fill({ color: 0x000000, alpha: 0.7 }); // Semi-transparent black
+    overlay.interactive = true; // Block clicks behind modal
+    overlay.cursor = "default";
+    modalOverlay.addChild(overlay);
+
+    // Modal background (centered)
+    const modalBg = new Graphics();
+    modalBg.roundRect(0, 0, modalWidth, modalHeight, 15);
+    modalBg.fill({ color: 0x1a1a1a, alpha: 0.95 }); // Dark semi-transparent
+    modalBg.stroke({ color: 0x87CEEB, width: 4 }); // Baby blue border
+    modalBg.x = (screenWidth - modalWidth) / 2;
+    modalBg.y = (screenHeight - modalHeight) / 2;
+    modalOverlay.addChild(modalBg);
+
+    // Drop shadow (positioned behind modal)
+    const shadow = new Graphics();
+    shadow.roundRect(0, 0, modalWidth, modalHeight, 15);
+    shadow.fill({ color: 0x000000, alpha: 0.5 });
+    shadow.x = (screenWidth - modalWidth) / 2 + 5;
+    shadow.y = (screenHeight - modalHeight) / 2 + 5;
+    modalOverlay.addChildAt(shadow, 1); // Insert behind modal background
+
+    // Modal header
+    const header = new Container();
+
+    // Header background - positioned relative to header container
+    const headerBg = new Graphics();
+    headerBg.roundRect(0, 0, modalWidth, 60, 15);
+    headerBg.fill({ color: 0x2a2a2a, alpha: 0.9 });
+    headerBg.x = 0;
+    headerBg.y = 0;
+    header.addChild(headerBg);
+
+    // Title text - positioned relative to header container
+    const titleText = new Text(title, {
+      fontSize: 24,
+      fontWeight: 'bold',
+      fill: 0x87CEEB,
+      align: 'center',
+      fontFamily: 'Arial, sans-serif'
+    });
+    titleText.anchor.set(0.5);
+    titleText.x = modalWidth / 2;
+    titleText.y = 30;
+    header.addChild(titleText);
+
+    // Close button
+    const closeButton = new Container();
+    const closeBg = new Graphics();
+    closeBg.circle(0, 0, 20);
+    closeBg.fill({ color: 0xFF5722 });
+    closeBg.stroke({ color: 0xFFFFFF, width: 2 });
+    closeButton.addChild(closeBg);
+
+    const closeText = new Text("✕", {
+      fontSize: 16,
+      fontWeight: 'bold',
+      fill: 0xFFFFFF,
+      align: 'center',
+      fontFamily: 'Arial, sans-serif'
+    });
+    closeText.anchor.set(0.5);
+    closeButton.addChild(closeText);
+
+    closeButton.x = modalWidth - 30;
+    closeButton.y = 30;
+    closeButton.interactive = true;
+    closeButton.cursor = "pointer";
+    closeButton.on("pointerdown", () => {
+      this.closeModal(modalOverlay);
+    });
+
+    // Hover effect for close button
+    closeButton.on("pointerover", () => {
+      closeBg.clear();
+      closeBg.circle(0, 0, 20);
+      closeBg.fill({ color: 0xFF7043 });
+      closeBg.stroke({ color: 0xFFFFFF, width: 3 });
+    });
+
+    closeButton.on("pointerout", () => {
+      closeBg.clear();
+      closeBg.circle(0, 0, 20);
+      closeBg.fill({ color: 0xFF5722 });
+      closeBg.stroke({ color: 0xFFFFFF, width: 2 });
+    });
+
+    header.addChild(closeButton);
+
+    // Position header container absolutely
+    header.x = (screenWidth - modalWidth) / 2;
+    header.y = (screenHeight - modalHeight) / 2;
+    modalOverlay.addChild(header);
+
+    // Content area - position content absolutely
+    content.x = (screenWidth - modalWidth) / 2 + 20;
+    content.y = (screenHeight - modalHeight) / 2 + 80; // Position below header
+    modalOverlay.addChild(content);
+
+    // Position modal overlay at origin (all children are already positioned absolutely)
+    modalOverlay.x = 0;
+    modalOverlay.y = 0;
+
+    // Add to stage (highest level)
+    engine().stage.addChild(modalOverlay);
+
+    // Click outside to close
+    overlay.on("pointerdown", () => {
+      this.closeModal(modalOverlay);
+    });
+  }
+
+  private closeModal(modalOverlay: Container) {
+    if (modalOverlay && modalOverlay.parent) {
+      modalOverlay.parent.removeChild(modalOverlay);
+      modalOverlay.destroy();
+    }
+  }
+
+  private getGameInfoContent(): Container {
+    const content = new Container();
+
+    // LEFT COLUMN - Game Info and Game Mechanics
+    const leftColumn = new Container();
+    leftColumn.x = 20;
+    leftColumn.y = 0;
+
+    // Game info sections for left column
+    const leftSections = [
+      {
+        title: "Multiplier Shuffle",
+        subtitle: "Version 1.0.0",
+        items: [
+          "🎯 Launch pucks to win multiplier rewards",
+          "🚀 Use SPACEBAR to launch or click LAUNCH button",
+          "⬆️⬇️ Arrow keys control bet amount",
+          "🎮 AUTO mode for continuous play",
+          "⚡ TURBO mode for ultra-fast gameplay"
+        ]
+      },
+      {
+        title: "Game Mechanics",
+        items: [
+          "• Pucks travel down the board to land in multiplier zones",
+          "• Higher multipliers are rarer but offer bigger rewards",
+          "• Your bet is multiplied by the zone you land in",
+          "• Avoid the DROP zone at the top for maximum rewards"
+        ]
+      }
+    ];
+
+    let yOffset = 0;
+
+    leftSections.forEach((section) => {
+      // Section title
+      const sectionTitle = new Text(section.title, {
+        fontSize: 18,
+        fontWeight: 'bold',
+        fill: 0xFFD700, // Gold
+        fontFamily: 'Arial, sans-serif'
+      });
+      sectionTitle.x = 0;
+      sectionTitle.y = yOffset;
+      leftColumn.addChild(sectionTitle);
+      yOffset += 30;
+
+      // Subtitle if exists
+      if (section.subtitle) {
+        const subtitle = new Text(section.subtitle, {
+          fontSize: 14,
+          fill: 0x87CEEB,
+          fontFamily: 'Arial, sans-serif'
+        });
+        subtitle.x = 0;
+        subtitle.y = yOffset;
+        leftColumn.addChild(subtitle);
+        yOffset += 25;
+      }
+
+      // Section items
+      section.items.forEach((item) => {
+        const itemText = new Text(item, {
+          fontSize: 14,
+          fill: 0xFFFFFF,
+          fontFamily: 'Arial, sans-serif'
+        });
+        itemText.x = 10;
+        itemText.y = yOffset;
+        leftColumn.addChild(itemText);
+        yOffset += 22;
+      });
+
+      yOffset += 15; // Extra spacing between sections
+    });
+
+    content.addChild(leftColumn);
+
+    return content;
+  }
+
+  private getRTPOddsContent(): Container {
+    const content = new Container();
+
+    // LEFT COLUMN - RTP Section
+    const leftColumn = new Container();
+    leftColumn.x = 20;
+    leftColumn.y = 0;
+
+    const rtpTitle = new Text("Return to Player (RTP)", {
+      fontSize: 18,
+      fontWeight: 'bold',
+      fill: 0xFFD700,
+      fontFamily: 'Arial, sans-serif'
+    });
+    rtpTitle.x = 0;
+    rtpTitle.y = 0;
+    leftColumn.addChild(rtpTitle);
+
+    const rtpValue = new Text("96.5%", {
+      fontSize: 24,
+      fontWeight: 'bold',
+      fill: 0x00FF00,
+      fontFamily: 'Arial, sans-serif'
+    });
+    rtpValue.x = 0;
+    rtpValue.y = 25;
+    leftColumn.addChild(rtpValue);
+
+    const rtpDesc = new Text("Theoretical return over extended play", {
+      fontSize: 12,
+      fill: 0xCCCCCC,
+      fontFamily: 'Arial, sans-serif'
+    });
+    rtpDesc.x = 0;
+    rtpDesc.y = 55;
+    leftColumn.addChild(rtpDesc);
+
+    // Additional RTP info
+    const rtpDetails = new Text("This percentage represents\nthe expected return to\nplayers over many rounds\nof gameplay.", {
+      fontSize: 11,
+      fill: 0xCCCCCC,
+      fontFamily: 'Arial, sans-serif'
+    });
+    rtpDetails.x = 0;
+    rtpDetails.y = 80;
+    leftColumn.addChild(rtpDetails);
+
+    content.addChild(leftColumn);
+
+    // RIGHT COLUMN - Odds Table
+    const rightColumn = new Container();
+    rightColumn.x = 250; // Position to the right of left column
+    rightColumn.y = 0;
+
+    const oddsTitle = new Text("Multiplier Probabilities", {
+      fontSize: 18,
+      fontWeight: 'bold',
+      fill: 0xFFD700,
+      fontFamily: 'Arial, sans-serif'
+    });
+    oddsTitle.x = 0;
+    oddsTitle.y = 0;
+    rightColumn.addChild(oddsTitle);
+
+    const oddsData = [
+      { multiplier: "1000x", probability: "0.1%", color: 0xFF0000 },
+      { multiplier: "500x", probability: "0.2%", color: 0xFF4500 },
+      { multiplier: "100x", probability: "1.0%", color: 0xFF8C00 },
+      { multiplier: "25x", probability: "3.0%", color: 0xFFA500 },
+      { multiplier: "10x", probability: "5.0%", color: 0xFFD700 },
+      { multiplier: "5x", probability: "10.0%", color: 0xFFFF00 },
+      { multiplier: "1x", probability: "30.0%", color: 0x9AFF9A },
+      { multiplier: "No Win", probability: "50.7%", color: 0x0000FF }
+    ];
+
+    let yPos = 30;
+    oddsData.forEach((item) => {
+      // Multiplier
+      const multText = new Text(item.multiplier, {
+        fontSize: 13,
+        fontWeight: 'bold',
+        fill: item.color,
+        fontFamily: 'Arial, sans-serif'
+      });
+      multText.x = 0;
+      multText.y = yPos;
+      rightColumn.addChild(multText);
+
+      // Probability
+      const probText = new Text(item.probability, {
+        fontSize: 13,
+        fill: 0xFFFFFF,
+        fontFamily: 'Arial, sans-serif'
+      });
+      probText.x = 80;
+      probText.y = yPos;
+      rightColumn.addChild(probText);
+
+      yPos += 22;
+    });
+
+    content.addChild(rightColumn);
+
+    // Add disclaimer below both columns
+    this.addDisclaimer(content, 220);
+
+    return content;
+  }
+
+  private getHistoryContent(): Container {
+    const content = new Container();
+
+    // Coming soon message
+    const title = new Text("Game History", {
+      fontSize: 18,
+      fontWeight: 'bold',
+      fill: 0xFFD700,
+      fontFamily: 'Arial, sans-serif'
+    });
+    title.x = 20;
+    title.y = 0;
+    content.addChild(title);
+
+    const subtitle = new Text("Feature Coming Soon!", {
+      fontSize: 16,
+      fontWeight: 'bold',
+      fill: 0x87CEEB,
+      fontFamily: 'Arial, sans-serif'
+    });
+    subtitle.x = 20;
+    subtitle.y = 35;
+    content.addChild(subtitle);
+
+    const description = new Text("This section will display your recent game results including:", {
+      fontSize: 14,
+      fill: 0xFFFFFF,
+      fontFamily: 'Arial, sans-serif'
+    });
+    description.x = 20;
+    description.y = 70;
+    content.addChild(description);
+
+    const features = [
+      "• Last 50 game results with timestamps",
+      "• Win/loss statistics and percentages",
+      "• Biggest wins and multipliers achieved",
+      "• Total amount wagered and won",
+      "• Performance analytics and trends",
+      "• Export functionality for record keeping"
+    ];
+
+    let yPos = 100;
+    features.forEach((feature) => {
+      const featureText = new Text(feature, {
+        fontSize: 14,
+        fill: 0xCCCCCC,
+        fontFamily: 'Arial, sans-serif'
+      });
+      featureText.x = 30;
+      featureText.y = yPos;
+      content.addChild(featureText);
+      yPos += 25;
+    });
+
+    // Add disclaimer
+    this.addDisclaimer(content, yPos + 20);
+
+    return content;
+  }
+
+  private addDisclaimer(content: Container, yOffset: number): void {
+    // Disclaimer section
+    const disclaimerBg = new Graphics();
+    disclaimerBg.roundRect(10, yOffset - 5, 420, 80, 8);
+    disclaimerBg.fill({ color: 0x333333, alpha: 0.8 });
+    disclaimerBg.stroke({ color: 0x666666, width: 1 });
+    content.addChild(disclaimerBg);
+
+    const disclaimerTitle = new Text("Important Notice", {
+      fontSize: 12,
+      fontWeight: 'bold',
+      fill: 0xFFD700,
+      fontFamily: 'Arial, sans-serif'
+    });
+    disclaimerTitle.x = 20;
+    disclaimerTitle.y = yOffset + 5;
+    content.addChild(disclaimerTitle);
+
+    const disclaimerText = new Text(
+      "Visual graphics and animations are for entertainment purposes only.\nAll game outcomes are determined by secure server-side calculations.\nGraphical malfunctions do not affect actual game results or balance updates.",
+      {
+        fontSize: 11,
+        fill: 0xCCCCCC,
+        fontFamily: 'Arial, sans-serif',
+        wordWrap: true,
+        wordWrapWidth: 400
+      }
+    );
+    disclaimerText.x = 20;
+    disclaimerText.y = yOffset + 25;
+    content.addChild(disclaimerText);
   }
 
   private async createPuck() {
@@ -413,63 +1162,27 @@ export class Shuffleboard extends Container {
     this.boardContainer.addChild(launchPad);
 
     try {
-      // Load puck textures using Assets API
+      // Load puck textures using Assets API and store them for on-demand creation
       console.log("Loading puck textures...");
 
-      const puckTexture = await Assets.load('/puck.png');
-      const puck2Texture = await Assets.load('/puck2.png');
+      this.puckTexture = await Assets.load('/puck.png');
+      this.puck2Texture = await Assets.load('/puck2.png');
 
-      console.log("Textures loaded successfully");
-
-      // Create first puck with loaded texture
-      this.puck = new Sprite(puckTexture);
-      this.puck.anchor.set(0.5);
-      this.puck.scale.set(0.8);
-      this.puck.x = 0;
-      this.puck.y = 443;
-      this.boardContainer.addChild(this.puck);
-      console.log("Puck 1 created successfully");
-
-      // Create second puck with loaded texture
-      this.puck2 = new Sprite(puck2Texture);
-      this.puck2.anchor.set(0.5);
-      this.puck2.scale.set(0.8);
-      this.puck2.x = 0;
-      this.puck2.y = 443;
-      this.puck2.visible = false; // Hide initially
-      this.boardContainer.addChild(this.puck2);
-      console.log("Puck 2 created successfully");
+      console.log("Textures loaded successfully - ready for on-demand puck creation");
 
     } catch (error) {
       console.error("Error loading puck textures:", error);
-      console.log("Creating fallback colored circles...");
+      console.log("Will use fallback colored circles for puck creation");
 
-      // Create fallback red circle for puck 1
-      const fallbackPuck = new Graphics();
-      fallbackPuck.circle(0, 0, 15);
-      fallbackPuck.fill({ color: 0xFF0000 });
-      fallbackPuck.x = 0;
-      fallbackPuck.y = 443;
-      this.boardContainer.addChild(fallbackPuck);
-      this.puck = fallbackPuck as any;
-
-      // Create fallback blue circle for puck 2
-      const fallbackPuck2 = new Graphics();
-      fallbackPuck2.circle(0, 0, 15);
-      fallbackPuck2.fill({ color: 0x0000FF });
-      fallbackPuck2.x = 0;
-      fallbackPuck2.y = 443;
-      fallbackPuck2.visible = false;
-      this.boardContainer.addChild(fallbackPuck2);
-      this.puck2 = fallbackPuck2 as any;
-
-      console.log("Fallback pucks created (red and blue circles)");
+      // Set fallback textures to null so we know to use Graphics
+      this.puckTexture = null;
+      this.puck2Texture = null;
     }
 
     // Initialize active pucks array
     this.activePucks = [];
 
-    console.log("Shuffleboard: Both pucks created with alternating system");
+    console.log("Shuffleboard: Puck system ready for unlimited rapid-fire shooting");
   }
 
   private createCombinedBorder() {
@@ -515,25 +1228,37 @@ export class Shuffleboard extends Container {
     console.log("Shuffleboard: Fixed borders created to properly contain board");
   }
 
-  private toggleAutoMode(button: Graphics, buttonText: Text) {
+  private toggleAutoMode(button: Graphics, _buttonText: Text) {
+    // If turbo is active, turn it off first
+    if (this.isTurboMode) {
+      this.isTurboMode = false;
+      this.updateTurboButtonAppearance();
+      this.updateLaunchButtonState();
+    }
+
     this.isAutoMode = !this.isAutoMode;
 
-    // Update button appearance
-    const buttonWidth = 160;
+    // Update button appearance (only color, not text)
+    const buttonWidth = 180;
     const buttonHeight = 50;
+    const newColor = this.isAutoMode ? 0x32CD32 : 0x2196F3; // Green when active, blue when inactive
 
     button.clear();
-    button.roundRect(-buttonWidth / 2, -buttonHeight / 2, buttonWidth, buttonHeight, 10);
-    button.fill({ color: this.isAutoMode ? 0xFF6B35 : 0x2196F3 }); // Orange when active, blue when inactive
+    button.roundRect(-buttonWidth / 2, -buttonHeight / 2, buttonWidth, buttonHeight, 12);
+    button.fill({ color: newColor });
     button.stroke({ color: 0xFFFFFF, width: 2 });
 
-    // Update button text
-    buttonText.text = this.isAutoMode ? "AUTO ON" : "AUTO OFF";
+    // Store current state color for hover effects
+    (button as any)._currentStateColor = newColor;
+
+    // Update all button states
+    this.updateLaunchButtonState();
+    this.updateTurboButtonState(); // Disable/enable turbo button
 
     if (this.isAutoMode) {
       // Start auto mode - launch first puck
       this.launchPuck();
-      console.log("Auto mode enabled - turbo shooting activated");
+      console.log("Auto mode enabled - medium speed");
     } else {
       // Stop auto mode
       if (this.autoInterval) {
@@ -544,93 +1269,313 @@ export class Shuffleboard extends Container {
     }
   }
 
-  private async launchPuck() {
-    // Allow multiple pucks to be launched without waiting
-    console.log("Launching puck - alternating system allows immediate shooting");
-
-    // Get the current puck to use (alternate between puck and puck2)
-    const currentPuck = this.currentPuckIndex === 0 ? this.puck : this.puck2;
-    if (!currentPuck) {
-      console.error("Current puck not available");
-      return;
-    }
-
-    // Check if current puck is available (not already in flight)
-    const isPuckInFlight = this.activePucks.includes(currentPuck);
-    if (isPuckInFlight) {
-      console.log("Current puck is in flight, switching to other puck");
-      // Switch to the other puck
-      this.currentPuckIndex = this.currentPuckIndex === 0 ? 1 : 0;
-      const alternatePuck = this.currentPuckIndex === 0 ? this.puck : this.puck2;
-      if (!alternatePuck || this.activePucks.includes(alternatePuck)) {
-        console.log("Both pucks are in flight, waiting...");
-        return;
+  private toggleTurboMode(button: Graphics, _buttonText: Text) {
+    // If auto is active, turn it off first
+    if (this.isAutoMode) {
+      this.isAutoMode = false;
+      if (this.autoInterval) {
+        clearInterval(this.autoInterval);
+        this.autoInterval = undefined;
       }
-      // Use the alternate puck instead
-      this.launchSpecificPuck(alternatePuck);
+      this.updateAutoButtonAppearance();
+      this.updateLaunchButtonState();
+    }
+
+    this.isTurboMode = !this.isTurboMode;
+
+    // Update button appearance (only color, not text)
+    const buttonWidth = 180;
+    const buttonHeight = 50;
+    const newColor = this.isTurboMode ? 0xFF1744 : 0xFF9800; // Red when active, orange when inactive
+
+    button.clear();
+    button.roundRect(-buttonWidth / 2, -buttonHeight / 2, buttonWidth, buttonHeight, 12);
+    button.fill({ color: newColor });
+    button.stroke({ color: 0xFFFFFF, width: 2 });
+
+    // Store current state color for hover effects
+    (button as any)._currentStateColor = newColor;
+
+    // Update all button states
+    this.updateLaunchButtonState();
+    this.updateAutoButtonState(); // Disable/enable auto button
+
+    if (this.isTurboMode) {
+      // Start turbo mode - launch first puck
+      this.launchPuck();
+      console.log("Turbo mode enabled - ultra fast");
+    } else {
+      // Stop turbo mode
+      console.log("Turbo mode disabled");
+    }
+  }
+
+  private updateAutoButtonAppearance() {
+    if (this.autoButton) {
+      const button = this.autoButton.children[0] as Graphics;
+      const buttonText = this.autoButton.children[1] as Text;
+      const buttonWidth = 180;
+      const buttonHeight = 50;
+      const isDisabled = this.isTurboMode || (this.gameScreenRef?.isControlsDisabled && this.gameScreenRef.isControlsDisabled()); // Disabled when turbo is active or bet exceeds balance
+
+      let backgroundColor: number;
+      let textColor: number;
+      let borderColor: number;
+
+      if (isDisabled) {
+        // Disabled state
+        backgroundColor = 0x666666; // Gray
+        textColor = 0x999999; // Light gray text
+        borderColor = 0x888888; // Gray border
+      } else {
+        // Normal state
+        backgroundColor = this.isAutoMode ? 0x32CD32 : 0x2196F3; // Green when active, blue when inactive
+        textColor = 0xFFFFFF; // White text
+        borderColor = 0xFFFFFF; // White border
+      }
+
+      button.clear();
+      button.roundRect(-buttonWidth / 2, -buttonHeight / 2, buttonWidth, buttonHeight, 12);
+      button.fill({ color: backgroundColor });
+      button.stroke({ color: borderColor, width: 2 });
+
+      // Update text color
+      buttonText.style.fill = textColor;
+
+      // Store current state color for hover effects
+      (button as any)._currentStateColor = backgroundColor;
+
+      // Update interactive state
+      this.autoButton.interactive = !isDisabled;
+      this.autoButton.cursor = isDisabled ? "default" : "pointer";
+      (this.autoButton as any)._isDisabled = isDisabled;
+    }
+  }
+
+  private updateAutoButtonState() {
+    this.updateAutoButtonAppearance();
+  }
+
+  private updateTurboButtonAppearance() {
+    if (this.turboButton) {
+      const button = this.turboButton.children[0] as Graphics;
+      const buttonText = this.turboButton.children[1] as Text;
+      const buttonWidth = 180;
+      const buttonHeight = 50;
+      const isDisabled = this.isAutoMode || (this.gameScreenRef?.isControlsDisabled && this.gameScreenRef.isControlsDisabled()); // Disabled when auto is active or bet exceeds balance
+
+      let backgroundColor: number;
+      let textColor: number;
+      let borderColor: number;
+
+      if (isDisabled) {
+        // Disabled state
+        backgroundColor = 0x666666; // Gray
+        textColor = 0x999999; // Light gray text
+        borderColor = 0x888888; // Gray border
+      } else {
+        // Normal state
+        backgroundColor = this.isTurboMode ? 0xFF1744 : 0xFF9800; // Red when active, orange when inactive
+        textColor = 0xFFFFFF; // White text
+        borderColor = 0xFFFFFF; // White border
+      }
+
+      button.clear();
+      button.roundRect(-buttonWidth / 2, -buttonHeight / 2, buttonWidth, buttonHeight, 12);
+      button.fill({ color: backgroundColor });
+      button.stroke({ color: borderColor, width: 2 });
+
+      // Update text color
+      buttonText.style.fill = textColor;
+
+      // Store current state color for hover effects
+      (button as any)._currentStateColor = backgroundColor;
+
+      // Update interactive state
+      this.turboButton.interactive = !isDisabled;
+      this.turboButton.cursor = isDisabled ? "default" : "pointer";
+      (this.turboButton as any)._isDisabled = isDisabled;
+    }
+  }
+
+  private updateTurboButtonState() {
+    this.updateTurboButtonAppearance();
+  }
+
+  private updateLaunchButtonState() {
+    if (this.playbar) {
+      const button = this.playbar.children[0] as Graphics;
+      const buttonText = this.playbar.children[1] as Text;
+      const buttonWidth = 180;
+      const buttonHeight = 50;
+      const isDisabled = this.isAutoMode || this.isTurboMode || (this.gameScreenRef?.isControlsDisabled && this.gameScreenRef.isControlsDisabled());
+
+      // Update appearance based on state
+      const backgroundColor = isDisabled ? 0x666666 : 0x4CAF50; // Gray when disabled, green when enabled
+      const textColor = isDisabled ? 0x999999 : 0xFFFFFF; // Lighter text when disabled
+
+      button.clear();
+      button.roundRect(-buttonWidth / 2, -buttonHeight / 2, buttonWidth, buttonHeight, 12);
+      button.fill({ color: backgroundColor });
+      button.stroke({ color: isDisabled ? 0x888888 : 0xFFFFFF, width: 2 });
+
+      // Update text color
+      buttonText.style.fill = textColor;
+
+      // Store current state color for hover effects
+      (button as any)._currentStateColor = backgroundColor;
+
+      // Update interactive state
+      this.playbar.interactive = !isDisabled;
+      this.playbar.cursor = isDisabled ? "default" : "pointer";
+      (this.playbar as any)._isDisabled = isDisabled;
+    }
+  }
+
+  private createNewPuck(useAlternateTexture: boolean = false): Sprite {
+    let newPuck: Sprite;
+
+    // Check if we have loaded textures
+    if (this.puckTexture && this.puck2Texture) {
+      // Use loaded textures
+      const texture = useAlternateTexture ? this.puck2Texture : this.puckTexture;
+      newPuck = new Sprite(texture);
+    } else {
+      // Create fallback Graphics puck
+      const fallbackPuck = new Graphics();
+      fallbackPuck.circle(0, 0, 15);
+      fallbackPuck.fill({ color: useAlternateTexture ? 0x0000FF : 0xFF0000 }); // Blue or Red
+      newPuck = fallbackPuck as any;
+    }
+
+    // Set up the puck
+    newPuck.anchor.set(0.5);
+    newPuck.scale.set(0.8);
+    newPuck.x = 0;
+    newPuck.y = 443; // Launch pad position
+
+    this.boardContainer.addChild(newPuck);
+    return newPuck;
+  }
+
+  private async launchPuck() {
+    const clickTime = performance.now();
+
+    // Check if controls are disabled (bet exceeds balance)
+    if (this.gameScreenRef?.isControlsDisabled && this.gameScreenRef.isControlsDisabled()) {
+      console.log("🚫 Launch blocked - bet amount exceeds available balance");
       return;
     }
 
-    // Launch the current puck
-    this.launchSpecificPuck(currentPuck);
+    // Reduced logging for performance in auto mode
+    if (!this.isAutoMode) {
+      console.log(`🚀 CLICK! Starting launch at ${clickTime.toFixed(2)}ms`);
+    }
 
-    // Switch to the other puck for next launch
+    // INSTANT BALANCE SUBTRACTION - Subtract bet amount immediately for instant feedback
+    const betAmount = this.gameScreenRef?.getBetAmount() || 1.00;
+    if (this.gameScreenRef?.updateBalance) {
+      const currentBalance = this.gameScreenRef.getBalance() || 0;
+      const newBalance = Math.max(0, currentBalance - betAmount); // Prevent negative balance
+      this.gameScreenRef.updateBalance(newBalance);
+      console.log(`💰 INSTANT: Subtracted $${betAmount} from balance immediately`);
+    }
+
+    // Create a new puck on-demand (alternate texture for visual distinction)
+    const useAlternateTexture = this.currentPuckIndex === 1;
+    const newPuck = this.createNewPuck(useAlternateTexture);
+
+    if (!this.isAutoMode) {
+      console.log(`🎯 Created new ${useAlternateTexture ? 'blue' : 'red'} puck for instant launch`);
+    }
+
+    // Launch the newly created puck INSTANTLY
+    this.launchSpecificPuckInstant(newPuck, clickTime);
+
+    // Switch texture for next puck (visual alternation)
     this.currentPuckIndex = this.currentPuckIndex === 0 ? 1 : 0;
   }
 
-  private async launchSpecificPuck(puck: Sprite) {
-    // Clear win modal when launching puck
-    this.clearWinModal();
+  private launchSpecificPuckInstant(puck: Sprite, clickTime: number) {
+    // INSTANT VISUAL FEEDBACK - Start animation immediately!
+    const animationStartTime = performance.now();
+    console.log(`🎯 INSTANT ANIMATION! Started ${(animationStartTime - clickTime).toFixed(2)}ms after click`);
 
+    // Add puck to active pucks list
+    this.activePucks.push(puck);
+    puck.visible = true;
+
+    // Start the visual animation IMMEDIATELY with a random target for now
+    const tempTargetZone = Math.floor(Math.random() * 12);
+    const tempMultiplier = [0, 1000, 0, 500, 100, 25, 10, 5, 1, 0, 0, 0][tempTargetZone];
+    const betAmount = this.gameScreenRef?.getBetAmount() || 1.00;
+
+    // Start animation instantly with temporary data
+    this.startInstantAnimation(puck, tempTargetZone, tempMultiplier, betAmount * tempMultiplier, clickTime);
+
+    // Handle API calls in the background (non-blocking)
+    this.handleBackgroundAPICall(puck, betAmount, clickTime);
+  }
+
+  private async handleBackgroundAPICall(_puck: Sprite, betAmount: number, clickTime: number) {
     try {
-      // Add puck to active pucks list
-      this.activePucks.push(puck);
-      puck.visible = true;
+      const apiStartTime = performance.now();
+      console.log(`📡 API CALL: Started ${(apiStartTime - clickTime).toFixed(2)}ms after click`);
 
-      // Get bet amount from GameScreen
-      const betAmount = this.gameScreenRef?.getBetAmount() || 1.00;
       const betAmountMicro = stakeAPI.toMicroUnits(betAmount);
 
-      console.log("Launching specific puck with bet:", betAmount);
-
-      // Track game event
-      await stakeAPI.trackEvent('puck_launch');
+      // Track game event (background)
+      stakeAPI.trackEvent('puck_launch').catch(console.error);
 
       // Call Stake API to play round
       const playResponse = await stakeAPI.play(betAmountMicro);
-      const currentRound = playResponse.round;
+      const apiEndTime = performance.now();
+      console.log(`📡 API RESPONSE: Received ${(apiEndTime - clickTime).toFixed(2)}ms after click (took ${(apiEndTime - apiStartTime).toFixed(2)}ms)`);
 
-      // Update balance in GameScreen
+      // Update with the REAL balance from server (this corrects any discrepancies)
+      // Only update if the server balance is significantly different from our prediction
       if (this.gameScreenRef?.updateBalance) {
-        const newBalance = stakeAPI.fromMicroUnits(playResponse.balance.amount);
-        this.gameScreenRef.updateBalance(newBalance);
+        const serverBalance = stakeAPI.fromMicroUnits(playResponse.balance.amount);
+        const currentDisplayBalance = this.gameScreenRef.getBalance() || 0;
+        const expectedBalance = currentDisplayBalance; // We already subtracted the bet
+        const difference = Math.abs(serverBalance - expectedBalance);
+
+        // Only update if there's a significant difference (more than $0.01)
+        // This prevents the jarring jump back to the old balance
+        if (difference > 0.01) {
+          this.gameScreenRef.updateBalance(serverBalance);
+          console.log(`💰 SERVER: Balance corrected from $${currentDisplayBalance} to $${serverBalance} (diff: $${difference.toFixed(2)})`);
+        } else {
+          console.log(`💰 SERVER: Balance matches expectation ($${serverBalance}), no update needed`);
+        }
       }
 
-      // Extract game result from round data
+      // Extract real game result from round data
       const { multiplier, finalPosition, winAmount } = playResponse.round;
-      const targetZone = finalPosition || 0;
+      const realTargetZone = finalPosition || 0;
 
-      // Start puck animation to target zone
-      this.animateSpecificPuckToZone(puck, targetZone, multiplier, stakeAPI.fromMicroUnits(winAmount || 0), currentRound);
+      console.log(`🎲 REAL RESULT: Zone ${realTargetZone}, ${multiplier}x, $${stakeAPI.fromMicroUnits(winAmount || 0)}`);
+
+      // The animation is already running with temp data, we could potentially update it
+      // or just let it complete with the temp result for instant feedback
 
     } catch (error) {
-      console.error("Error launching specific puck:", error);
-
-      // Remove from active list on error
-      const index = this.activePucks.indexOf(puck);
-      if (index > -1) {
-        this.activePucks.splice(index, 1);
+      console.error("Error in background API call:", error);
+      // If API fails, we should restore the balance since we pre-subtracted
+      if (this.gameScreenRef?.updateBalance) {
+        const currentBalance = this.gameScreenRef.getBalance() || 0;
+        const restoredBalance = currentBalance + betAmount;
+        this.gameScreenRef.updateBalance(restoredBalance);
+        console.log(`💰 RESTORE: API failed, restored $${betAmount} to balance`);
       }
-
-      // Fallback: use local simulation
-      this.simulateLocalGameForPuck(puck);
     }
   }
 
-  private animateSpecificPuckToZone(puck: Sprite, targetZone: number, multiplier: number, winAmount: number, currentRound: any) {
+  private startInstantAnimation(puck: Sprite, targetZone: number, multiplier: number, winAmount: number, clickTime: number) {
     if (!puck || !engine().ticker.started) return;
 
-    console.log(`Animating puck to zone ${targetZone}, multiplier: ${multiplier}x, win: $${winAmount}`);
+    const animationStartTime = performance.now();
+    console.log(`🎬 ANIMATION: Starting ${(animationStartTime - clickTime).toFixed(2)}ms after click`);
 
     // Calculate target Y position based on zone
     const zoneHeight = 60;
@@ -647,213 +1592,99 @@ export class Shuffleboard extends Container {
       progress: 0,
       multiplier: multiplier,
       winAmount: winAmount,
-      duration: 2000 + Math.random() * 1000, // 2-3 seconds
-      startTime: Date.now(),
+      duration: this.isTurboMode ? 200 + Math.random() * 100 : // TURBO: 0.2-0.3 seconds (ultra fast)
+        this.isAutoMode ? 400 + Math.random() * 200 : // AUTO: 0.4-0.6 seconds (medium speed)
+          1500 + Math.random() * 500, // MANUAL: 1.5-2 seconds (normal speed)
+      startTime: performance.now(),
       puck: puck,
-      round: currentRound
+      clickTime: clickTime
     };
 
-    // Smooth animation function with easing
+    // Ultra-smooth animation function with easing
     const animatePuck = () => {
       if (!puck || !puck.parent) {
         engine().ticker.remove(animatePuck, this);
         return;
       }
 
-      const elapsed = Date.now() - animationData.startTime;
+      const elapsed = performance.now() - animationData.startTime;
       const progress = Math.min(elapsed / animationData.duration, 1);
 
-      // Ease out cubic for realistic physics
-      const easeProgress = 1 - Math.pow(1 - progress, 3);
+      // Ease out cubic for realistic physics (faster initial movement)
+      const easeProgress = 1 - Math.pow(1 - progress, 2.5); // More aggressive easing
 
       // Update puck position with some horizontal drift for realism
-      const drift = Math.sin(progress * Math.PI * 2) * 15;
+      const drift = Math.sin(progress * Math.PI * 3) * 12; // Faster oscillation, less drift
       puck.y = animationData.startY + (animationData.targetY - animationData.startY) * easeProgress;
       puck.x = drift;
 
       // Animation complete
       if (progress >= 1) {
+        const landTime = performance.now();
+        console.log(`🎯 LANDED: ${(landTime - clickTime).toFixed(2)}ms total from click to land`);
+
         engine().ticker.remove(animatePuck, this);
-        this.onSpecificPuckLanded(puck, animationData.multiplier, animationData.winAmount, animationData.round);
+        this.onInstantPuckLanded(puck, animationData.multiplier, animationData.winAmount);
       }
     };
 
-    // Start animation
+    // Start animation immediately
     engine().ticker.add(animatePuck, this);
+
+    console.log(`⚡ INSTANT: Animation started immediately, targeting zone ${targetZone} (${multiplier}x)`);
   }
 
-  private async onSpecificPuckLanded(puck: Sprite, multiplier: number, winAmount: number, currentRound: any) {
-    console.log(`Puck landed! Multiplier: ${multiplier}x, Win: $${winAmount}`);
+  private async onInstantPuckLanded(puck: Sprite, multiplier: number, winAmount: number) {
+    console.log(`🏆 RESULT: ${multiplier}x multiplier, $${winAmount.toFixed(2)} win`);
+
+    // Update win display in control panel
+    this.updatePanelWinDisplay(winAmount, multiplier);
 
     try {
-      // Track landing event
-      await stakeAPI.trackEvent('puck_landed');
+      // Track landing event (background)
+      stakeAPI.trackEvent('puck_landed').catch(console.error);
 
-      // Update win display
-      this.updateWinDisplay(winAmount, multiplier);
-
-      // If there's a win, we need to call endRound to complete the bet
-      if (winAmount > 0 && currentRound) {
-        console.log("Win detected, calling endRound to complete bet...");
-
-        // Add small delay for dramatic effect
+      // Handle wins in background
+      if (winAmount > 0) {
         setTimeout(async () => {
           try {
             const endRoundResponse = await stakeAPI.endRound();
-
-            // Update balance after payout
             if (this.gameScreenRef?.updateBalance) {
               const finalBalance = stakeAPI.fromMicroUnits(endRoundResponse.balance.amount);
               this.gameScreenRef.updateBalance(finalBalance);
             }
-
-            console.log("Round completed successfully");
           } catch (error) {
             console.error("Error ending round:", error);
           }
-        }, 1000);
+        }, 100); // Very quick payout
       }
 
     } catch (error) {
-      console.error("Error in puck landed handler:", error);
+      console.error("Error in instant puck landed handler:", error);
     } finally {
-      // Reset puck position and remove from active list
-      this.resetSpecificPuckPosition(puck);
-
       // Remove puck from active list
       const index = this.activePucks.indexOf(puck);
       if (index > -1) {
         this.activePucks.splice(index, 1);
       }
 
-      // Continue auto mode if it's enabled
-      if (this.isAutoMode) {
+      // Remove the puck from the board and destroy it (since it was created on-demand)
+      if (puck.parent) {
+        puck.parent.removeChild(puck);
+      }
+      puck.destroy();
+      console.log("🗑️ Puck cleaned up and destroyed");
+
+      // Continue auto or turbo mode if enabled
+      if (this.isAutoMode || this.isTurboMode) {
+        const delay = this.isTurboMode ? 2 : 5; // 2ms for turbo, 5ms for auto
         setTimeout(() => {
-          if (this.isAutoMode) { // Check again in case auto was turned off
+          if (this.isAutoMode || this.isTurboMode) {
             this.launchPuck();
           }
-        }, 100); // Shorter delay for rapid fire mode
+        }, delay);
       }
     }
-  }
-
-  private resetSpecificPuckPosition(puck: Sprite) {
-    if (puck) {
-      puck.x = 0;
-      puck.y = 443; // Launch pad position
-      // Don't hide the puck, keep it visible for next launch
-    }
-  }
-
-  private simulateLocalGameForPuck(puck: Sprite) {
-    console.log("Using local game simulation for specific puck");
-
-    // Define multiplier zones (same as createBoard)
-    const multiplierZones = [0, 1000, 0, 500, 100, 25, 10, 5, 1, 0, 0, 0]; // Skip DROP zone
-    const randomZone = Math.floor(Math.random() * multiplierZones.length);
-    const multiplier = multiplierZones[randomZone];
-    const betAmount = this.gameScreenRef?.getBetAmount() || 1.00;
-    const winAmount = betAmount * multiplier;
-
-    // Animate to the randomly selected zone
-    this.animateSpecificPuckToZone(puck, randomZone, multiplier, winAmount, null);
-  }
-
-  private clearWinModal() {
-    // Reset win modal to show welcome message instead of win results
-    console.log("Clearing win modal - resetting to welcome state");
-
-    // Show welcome content
-    if (this.welcomeTitleText) {
-      this.welcomeTitleText.visible = true;
-      console.log("Welcome title text shown");
-    }
-
-    if (this.welcomeInstructionText) {
-      this.welcomeInstructionText.visible = true;
-      console.log("Welcome instruction text shown");
-    }
-
-    if (this.welcomeStatsText) {
-      this.welcomeStatsText.visible = true;
-      console.log("Welcome stats text shown");
-    }
-
-    // Hide win content
-    if (this.winTitleText) {
-      this.winTitleText.visible = false;
-      console.log("Win title text hidden");
-    }
-
-    if (this.winAmountText) {
-      this.winAmountText.visible = false;
-      console.log("Win amount text hidden");
-    }
-
-    if (this.multiplierText) {
-      this.multiplierText.visible = false;
-      console.log("Multiplier text hidden");
-    }
-
-    console.log("Win modal cleared - showing welcome message");
-  }
-
-  public updateWinDisplay(winAmount: number, multiplier: number) {
-    this.lastWinAmount = winAmount;
-    this.lastWinMultiplier = multiplier;
-
-    console.log("Updating win display - hiding welcome, showing win results");
-
-    // Hide welcome content
-    if (this.welcomeTitleText) {
-      this.welcomeTitleText.visible = false;
-    }
-
-    if (this.welcomeInstructionText) {
-      this.welcomeInstructionText.visible = false;
-    }
-
-    if (this.welcomeStatsText) {
-      this.welcomeStatsText.visible = false;
-    }
-
-    // Create or show "LAST WIN" title
-    if (!this.winTitleText && this.winModal) {
-      this.winTitleText = new Text("LAST WIN", {
-        fontSize: 24,
-        fontWeight: 'bold',
-        fill: 0x87CEEB, // Baby blue color
-        align: 'center',
-        fontFamily: 'Arial, sans-serif'
-      });
-      this.winTitleText.anchor.set(0.5);
-      this.winTitleText.x = 0;
-      this.winTitleText.y = -35;
-      this.winModal.addChild(this.winTitleText);
-      console.log("Created LAST WIN title");
-    }
-
-    if (this.winTitleText) {
-      this.winTitleText.visible = true;
-    }
-
-    // Show win results
-    if (this.winAmountText) {
-      this.winAmountText.text = `$${winAmount.toFixed(2)}`;
-      this.winAmountText.visible = true;
-    }
-
-    if (this.multiplierText) {
-      this.multiplierText.text = `${multiplier}x`;
-      this.multiplierText.visible = true;
-    }
-
-    // Play cashout sound for big wins (100x multiplier or more, or $100+ win)
-    if (multiplier >= 100 || winAmount >= 100) {
-      console.log("Big win detected - would play cashout sound");
-    }
-
-    console.log("Win display updated:", { winAmount, multiplier });
   }
 
   private setupKeyboardControls() {
@@ -866,28 +1697,68 @@ export class Shuffleboard extends Container {
         if (event.code === 'Space' || event.key === ' ') {
           event.preventDefault(); // Prevent page scroll on spacebar
 
-          // Only allow launch if auto mode is off (same logic as click handler)
-          if (!this.isAutoMode) {
+          // Only allow launch if both auto and turbo modes are off AND controls are not disabled
+          if (!this.isAutoMode && !this.isTurboMode && !(this.gameScreenRef?.isControlsDisabled && this.gameScreenRef.isControlsDisabled())) {
             this.launchPuck();
             console.log("Spacebar pressed - launching puck");
           } else {
-            console.log("Spacebar pressed but auto mode is active - ignoring");
+            if (this.gameScreenRef?.isControlsDisabled && this.gameScreenRef.isControlsDisabled()) {
+              console.log("Spacebar pressed but controls disabled - bet exceeds balance");
+            } else {
+              console.log("Spacebar pressed but auto/turbo mode is active - ignoring");
+            }
           }
         }
         // Handle up arrow for bet increase
         else if (event.code === 'ArrowUp' || event.key === 'ArrowUp') {
           event.preventDefault(); // Prevent page scroll
+
+          // Check if controls are disabled
+          if (this.gameScreenRef?.isControlsDisabled && this.gameScreenRef.isControlsDisabled()) {
+            console.log("Up arrow pressed but controls disabled - bet exceeds balance");
+            return;
+          }
+
           if (this.gameScreenRef && this.gameScreenRef.increaseBet) {
             this.gameScreenRef.increaseBet();
-            console.log("Up arrow pressed - increasing bet");
+            // Update visual bet display
+            const newBet = this.gameScreenRef.getBetAmount() || 1.00;
+            if ((this as any).betAmountText) {
+              (this as any).betAmountText.text = `$${newBet.toFixed(2)}`;
+            }
+            // Update controls state after bet change
+            this.updateControlsState();
+            console.log("Up arrow pressed - increasing bet to", newBet);
           }
         }
         // Handle down arrow for bet decrease
         else if (event.code === 'ArrowDown' || event.key === 'ArrowDown') {
           event.preventDefault(); // Prevent page scroll
+
+          // Check if controls are disabled
+          if (this.gameScreenRef?.isControlsDisabled && this.gameScreenRef.isControlsDisabled()) {
+            console.log("Down arrow pressed but controls disabled - bet exceeds balance");
+            return;
+          }
+
           if (this.gameScreenRef && this.gameScreenRef.decreaseBet) {
             this.gameScreenRef.decreaseBet();
-            console.log("Down arrow pressed - decreasing bet");
+            // Update visual bet display
+            const newBet = this.gameScreenRef.getBetAmount() || 1.00;
+            if ((this as any).betAmountText) {
+              (this as any).betAmountText.text = `$${newBet.toFixed(2)}`;
+            }
+            // Update controls state after bet change
+            this.updateControlsState();
+            console.log("Down arrow pressed - decreasing bet to", newBet);
+          }
+        }
+        // Handle ESC key to close menu
+        else if (event.code === 'Escape' || event.key === 'Escape') {
+          event.preventDefault();
+          if (this.isMenuOpen) {
+            this.closeMenuDropdown();
+            console.log("ESC pressed - closing menu");
           }
         }
       };
@@ -904,19 +1775,149 @@ export class Shuffleboard extends Container {
     }
   }
 
+  private setupGlobalClickHandler() {
+    try {
+      console.log("Shuffleboard: Setting up global click handler for menu");
+
+      // Add global click handler to close menu when clicking outside
+      const handleGlobalClick = (_event: PointerEvent) => {
+        if (this.isMenuOpen && this.menuDropdown && this.clickHandlerActive) {
+          console.log("🔧 DEBUG: Global click detected while menu is open - closing menu");
+          this.closeMenuDropdown();
+        }
+      };
+
+      // Add the event listener to the document
+      document.addEventListener('pointerdown', handleGlobalClick as any);
+
+      // Store reference to remove listener later
+      this.clickHandler = handleGlobalClick as any;
+
+      console.log("Shuffleboard: Global click handler setup complete");
+    } catch (error) {
+      console.error("Shuffleboard: Error setting up global click handler:", error);
+    }
+  }
+
   public setGameScreenReference(gameScreen: any) {
     this.gameScreenRef = gameScreen;
     console.log("Shuffleboard: GameScreen reference set for bet controls");
   }
 
+  public updateControlsState() {
+    const isDisabled = this.gameScreenRef?.isControlsDisabled && this.gameScreenRef.isControlsDisabled();
+
+    if (isDisabled) {
+      console.log("Controls disabled - bet amount exceeds balance");
+    }
+
+    // Update launch button state
+    this.updateLaunchButtonState();
+
+    // Update auto/turbo button states
+    this.updateAutoButtonState();
+    this.updateTurboButtonState();
+
+    // Update bet control buttons appearance
+    this.updateBetControlsAppearance(isDisabled);
+  }
+
+  private updateBetControlsAppearance(isDisabled: boolean) {
+    // Update decrease button appearance
+    if ((this as any).betDecreaseBtn && (this as any).betDecreaseText && (this as any).betDecreaseContainer) {
+      const decreaseBtn = (this as any).betDecreaseBtn;
+      const decreaseText = (this as any).betDecreaseText;
+      const decreaseContainer = (this as any).betDecreaseContainer;
+
+      decreaseBtn.clear();
+      decreaseBtn.circle(-50, 0, 15);
+      decreaseBtn.fill({ color: isDisabled ? 0x666666 : 0xFF5722 });
+      decreaseBtn.stroke({ color: isDisabled ? 0x888888 : 0xFFFFFF, width: 2 });
+      decreaseText.style.fill = isDisabled ? 0x999999 : 0xFFFFFF;
+      decreaseContainer.interactive = !isDisabled;
+      decreaseContainer.cursor = isDisabled ? "default" : "pointer";
+    }
+
+    // Update increase button appearance
+    if ((this as any).betIncreaseBtn && (this as any).betIncreaseText && (this as any).betIncreaseContainer) {
+      const increaseBtn = (this as any).betIncreaseBtn;
+      const increaseText = (this as any).betIncreaseText;
+      const increaseContainer = (this as any).betIncreaseContainer;
+
+      increaseBtn.clear();
+      increaseBtn.circle(50, 0, 15);
+      increaseBtn.fill({ color: isDisabled ? 0x666666 : 0x4CAF50 });
+      increaseBtn.stroke({ color: isDisabled ? 0x888888 : 0xFFFFFF, width: 2 });
+      increaseText.style.fill = isDisabled ? 0x999999 : 0xFFFFFF;
+      increaseContainer.interactive = !isDisabled;
+      increaseContainer.cursor = isDisabled ? "default" : "pointer";
+    }
+  }
+
+  private updatePanelWinDisplay(winAmount: number, multiplier: number) {
+    // Update win amount text in control panel
+    if ((this as any).panelWinAmountText) {
+      (this as any).panelWinAmountText.text = `$${winAmount.toFixed(2)}`;
+
+      // Color coding based on win amount
+      if (winAmount === 0) {
+        (this as any).panelWinAmountText.style.fill = 0x888888; // Gray for no win
+      } else if (winAmount < 10) {
+        (this as any).panelWinAmountText.style.fill = 0x00FF00; // Green for small wins
+      } else if (winAmount < 100) {
+        (this as any).panelWinAmountText.style.fill = 0xFFD700; // Gold for medium wins
+      } else {
+        (this as any).panelWinAmountText.style.fill = 0xFF4500; // Orange-red for big wins
+      }
+    }
+
+    // Update multiplier text in control panel
+    if ((this as any).panelMultiplierText) {
+      (this as any).panelMultiplierText.text = `${multiplier}x`;
+
+      // Color coding based on multiplier
+      if (multiplier === 0) {
+        (this as any).panelMultiplierText.style.fill = 0x888888; // Gray for no multiplier
+      } else if (multiplier <= 10) {
+        (this as any).panelMultiplierText.style.fill = 0x87CEEB; // Baby blue for low multiplier
+      } else if (multiplier <= 100) {
+        (this as any).panelMultiplierText.style.fill = 0xFFD700; // Gold for medium multiplier
+      } else {
+        (this as any).panelMultiplierText.style.fill = 0xFF0000; // Red for high multiplier
+      }
+    }
+
+    // Update win display background color based on win results
+    if ((this as any).winDisplayContainer) {
+      const winContainer = (this as any).winDisplayContainer;
+      const winBg = winContainer.children[0] as Graphics; // First child is the background
+
+      // Clear and redraw background with new color
+      winBg.clear();
+      winBg.roundRect(-90, -45, 180, 90, 10);
+
+      if (winAmount === 0) {
+        // No win - keep original dark background
+        winBg.fill({ color: 0x1a1a1a, alpha: 0.9 });
+        winBg.stroke({ color: 0xFFD700, width: 2 }); // Gold border
+      } else if (multiplier >= 100) {
+        // 100x or higher - blue background for big multiplier wins
+        winBg.fill({ color: 0x0066CC, alpha: 0.9 }); // Blue background
+        winBg.stroke({ color: 0x00AAFF, width: 3 }); // Bright blue border
+        console.log(`🔵 BIG MULTIPLIER WIN! ${multiplier}x - Blue background activated`);
+      } else {
+        // Regular win - green background
+        winBg.fill({ color: 0x006600, alpha: 0.9 }); // Green background
+        winBg.stroke({ color: 0x00FF00, width: 3 }); // Bright green border
+        console.log(`🟢 WIN! $${winAmount.toFixed(2)} - Green background activated`);
+      }
+    }
+
+    console.log(`Panel win display updated: $${winAmount.toFixed(2)}, ${multiplier}x`);
+  }
+
   public resize(width: number, height: number) {
     console.log("Shuffleboard resize called:", { width, height });
-
-    // Always center the shuffleboard in the screen
-    this.x = width / 2; // Center shuffleboard horizontally
-    this.y = height / 2;
-
-    console.log("Shuffleboard positioned at:", { x: this.x, y: this.y });
 
     // Define responsive breakpoints (media query style)
     const isMobile = width < 768; // Mobile: < 768px
@@ -927,135 +1928,106 @@ export class Shuffleboard extends Container {
 
     console.log("Device type:", { isMobile, isTablet, isDesktop, isLandscape, isPortrait });
 
-    // Position launch button based on device type and orientation
-    if (this.playbar) {
-      if (isMobile) {
-        if (isPortrait) {
-          // Mobile Portrait: Bottom right corner (relative to shuffleboard center)
-          this.playbar.x = (width / 2) - 120; // Offset from shuffleboard center
-          this.playbar.y = (height / 2) - 120; // Offset from shuffleboard center
-        } else {
-          // Mobile Landscape: Right side, centered vertically
-          this.playbar.x = (width / 2) - 140; // Offset from shuffleboard center
-          this.playbar.y = 0; // Center relative to shuffleboard
-        }
-      } else if (isTablet) {
-        if (isPortrait) {
-          // Tablet Portrait: Bottom right with more space
-          this.playbar.x = (width / 2) - 150; // Offset from shuffleboard center
-          this.playbar.y = (height / 2) - 140; // Offset from shuffleboard center
-        } else {
-          // Tablet Landscape: Right side, upper area
-          this.playbar.x = (width / 2) - 160; // Offset from shuffleboard center
-          this.playbar.y = -(height / 6); // Upper area relative to shuffleboard
-        }
-      } else {
-        // Desktop: Right side with generous spacing
-        if (isLandscape) {
-          this.playbar.x = (width / 2) - 200; // Offset from shuffleboard center
-          this.playbar.y = -(height / 4); // Upper area relative to shuffleboard
-        } else {
-          this.playbar.x = (width / 2) - 160; // Offset from shuffleboard center
-          this.playbar.y = (height / 2) - 160; // Offset from shuffleboard center
-        }
+    // Calculate board and panel scales first
+    let boardScale = 1.0;
+    let panelScale = 1.0;
+
+    if (isMobile) {
+      boardScale = isPortrait ? 0.5 : 0.6; // Smaller on mobile
+      panelScale = isPortrait ? 0.7 : 0.6;
+    } else if (isTablet) {
+      boardScale = isPortrait ? 0.7 : 0.8; // Medium on tablet
+      panelScale = isPortrait ? 0.85 : 0.9;
+    } else {
+      boardScale = 1.0; // Full size on desktop
+      panelScale = 1.0;
+    }
+
+    // Position shuffleboard container and components
+    if (isMobile && isPortrait) {
+      // Mobile Portrait: Stack vertically with no overlap
+      this.x = width / 2;
+      this.y = height * 0.35; // Position board higher
+
+      if (this.buttonPanel) {
+        // Position panel against the right edge with small margin
+        this.buttonPanel.x = (width / 2) - 20; // Right side with 20px margin
+        this.buttonPanel.y = height * 0.4; // Position panel below board with safe margin
+        this.buttonPanel.scale.set(panelScale);
       }
-      console.log("Launch button positioned at:", { x: this.playbar.x, y: this.playbar.y });
-    }
 
-    // Position auto button relative to launch button
-    if (this.autoButton && this.playbar) {
-      if (isMobile) {
-        if (isPortrait) {
-          // Mobile Portrait: Horizontally aligned, left of launch button
-          this.autoButton.x = this.playbar.x - 200; // 200px left of launch button
-          this.autoButton.y = this.playbar.y; // Same vertical position
-        } else {
-          // Mobile Landscape: Below launch button
-          this.autoButton.x = this.playbar.x; // Same horizontal position
-          this.autoButton.y = this.playbar.y + 80; // 80px below launch button
-        }
-      } else if (isTablet) {
-        if (isPortrait) {
-          // Tablet Portrait: Horizontally aligned, more space
-          this.autoButton.x = this.playbar.x - 220; // 220px left of launch button
-          this.autoButton.y = this.playbar.y; // Same vertical position
-        } else {
-          // Tablet Landscape: Below launch button with more space
-          this.autoButton.x = this.playbar.x; // Same horizontal position
-          this.autoButton.y = this.playbar.y + 100; // 100px below launch button
-        }
-      } else {
-        // Desktop: Below launch button with generous spacing
-        this.autoButton.x = this.playbar.x; // Same horizontal position
-        this.autoButton.y = this.playbar.y + 120; // 120px below launch button
+      if (this.board) {
+        this.board.scale.set(boardScale);
+        // Adjust board position to prevent overlap
+        this.boardContainer.y = -height * 0.15;
+        this.boardContainer.scale.set(boardScale); // Scale the entire board container including borders
       }
-      console.log("Auto button positioned at:", { x: this.autoButton.x, y: this.autoButton.y });
+    } else if (isMobile && isLandscape) {
+      // Mobile Landscape: Side by side with tight spacing
+      this.x = width * 0.35; // Move board left
+      this.y = height / 2;
+
+      if (this.buttonPanel) {
+        // Position panel against the right edge
+        this.buttonPanel.x = (width / 2) - 10; // Right edge with 10px margin
+        this.buttonPanel.y = 0;
+        this.buttonPanel.scale.set(panelScale);
+      }
+
+      if (this.board) {
+        this.board.scale.set(boardScale);
+        this.boardContainer.y = 0;
+        this.boardContainer.scale.set(boardScale); // Scale the entire board container including borders
+      }
+    } else if (isTablet && isPortrait) {
+      // Tablet Portrait: Side by side with medium spacing
+      this.x = width * 0.4;
+      this.y = height / 2;
+
+      if (this.buttonPanel) {
+        // Position panel against the right side with small margin
+        this.buttonPanel.x = (width / 2) - 30; // Right side with 30px margin
+        this.buttonPanel.y = 0;
+        this.buttonPanel.scale.set(panelScale);
+      }
+
+      if (this.board) {
+        this.board.scale.set(boardScale);
+        this.boardContainer.y = 0;
+        this.boardContainer.scale.set(boardScale); // Scale the entire board container including borders
+      }
+    } else {
+      // Tablet Landscape and Desktop: Standard side by side layout
+      this.x = width / 2;
+      this.y = height / 2;
+
+      if (this.buttonPanel) {
+        let panelX = isDesktop ? (width / 2) - 200 : (width / 2) - 160;
+        this.buttonPanel.x = panelX;
+        this.buttonPanel.y = 0;
+        this.buttonPanel.scale.set(panelScale);
+      }
+
+      if (this.board) {
+        this.board.scale.set(boardScale);
+        this.boardContainer.y = 0;
+        this.boardContainer.scale.set(1.0); // Full scale for desktop
+      }
     }
 
-    // Position win modal at the top of the board (fixed position)
-    if (this.winModal) {
-      // Always position at top center of the board, regardless of device
-      this.winModal.x = 0; // Center horizontally with board
-      this.winModal.y = -400; // Fixed position higher up from board
-      console.log("Win modal positioned at top of board:", { x: this.winModal.x, y: this.winModal.y });
+    console.log("Shuffleboard positioned at:", { x: this.x, y: this.y });
+
+    if (this.buttonPanel) {
+      console.log("Button panel positioned at:", {
+        x: this.buttonPanel.x,
+        y: this.buttonPanel.y,
+        scale: panelScale
+      });
     }
 
-    // Scale board for different screen sizes
     if (this.board) {
-      let boardScale = 1.0;
-
-      if (isMobile) {
-        boardScale = isPortrait ? 0.6 : 0.7; // Smaller on mobile
-      } else if (isTablet) {
-        boardScale = isPortrait ? 0.8 : 0.9; // Medium on tablet
-      } else {
-        boardScale = 1.0; // Full size on desktop
-      }
-
-      this.board.scale.set(boardScale);
       console.log("Board scaled to:", boardScale);
-    }
-
-    // Scale and position game title for different screen sizes
-    if (this.boardContainer.children.length > 1) {
-      // Find the game title container
-      for (let child of this.boardContainer.children) {
-        if (child instanceof Container) {
-          // Check if this container has title text
-          let hasTitle = false;
-          for (let grandchild of child.children) {
-            if (grandchild instanceof Text && (grandchild.text === "MULTIPLIER" || grandchild.text === "SHUFFLE")) {
-              hasTitle = true;
-              break;
-            }
-          }
-
-          if (hasTitle) {
-            let titleScale = 1.0;
-            let titleX = -(width / 2) + 100; // Left side positioning
-
-            if (isMobile) {
-              titleScale = isPortrait ? 0.6 : 0.7; // Smaller on mobile
-              titleX = -(width / 2) + 50; // Closer to edge on mobile
-            } else if (isTablet) {
-              titleScale = isPortrait ? 0.8 : 0.9; // Medium on tablet
-              titleX = -(width / 2) + 80; // Medium spacing on tablet
-            } else {
-              titleScale = 1.0; // Full size on desktop
-              titleX = -(width / 2) + 120; // More spacing on desktop
-            }
-
-            child.scale.set(titleScale);
-            child.x = titleX;
-            console.log("Game title scaled and positioned:", { scale: titleScale, x: titleX });
-            break;
-          }
-        }
-      }
-    }
-
-    // Log board dimensions for debugging
-    if (this.board) {
+      console.log("Board container scaled to:", this.boardContainer.scale.x);
       console.log("Board container dimensions:", {
         width: this.board.width,
         height: this.board.height,
@@ -1066,8 +2038,9 @@ export class Shuffleboard extends Container {
   }
 
   public destroy() {
-    // Clean up auto mode
+    // Clean up auto and turbo modes
     this.isAutoMode = false;
+    this.isTurboMode = false;
     if (this.autoInterval) {
       clearInterval(this.autoInterval);
       this.autoInterval = undefined;
@@ -1079,6 +2052,16 @@ export class Shuffleboard extends Container {
       this.keyboardHandler = undefined;
       console.log("Shuffleboard: Keyboard controls cleaned up");
     }
+
+    // Clean up global click handler
+    if (this.clickHandler) {
+      document.removeEventListener('pointerdown', this.clickHandler as any);
+      this.clickHandler = undefined;
+      console.log("Shuffleboard: Global click handler cleaned up");
+    }
+
+    // Clean up menu dropdown
+    this.closeMenuDropdown();
 
     super.destroy();
   }

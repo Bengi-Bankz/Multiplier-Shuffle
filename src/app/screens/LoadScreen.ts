@@ -51,14 +51,14 @@ export class LoadScreen extends Container {
     this.loaderImage.style.backgroundColor = "#000000";
     document.body.appendChild(this.loaderImage);
 
-    // Show for a bit
-    await new Promise(resolve => setTimeout(resolve, 5000));
+    // Show for half the time to play once without looping
+    await new Promise(resolve => setTimeout(resolve, 2500)); // Half of original time (5000ms / 2)
   }
 
   private async loadGameAssets() {
     // Assets are automatically loaded by the navigation system when GameScreen is shown
-    // Just add a delay to show the loader
-    await new Promise(resolve => setTimeout(resolve, 5000));
+    // Reduced time for stake engine loader to play once without looping
+    await new Promise(resolve => setTimeout(resolve, 1667)); // 1/3 of original time (5000ms / 3)
   }
 
   private removeLoader() {
