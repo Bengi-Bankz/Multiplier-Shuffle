@@ -54,7 +54,7 @@ export class Shuffleboard extends Container {
   private createBoard() {
     try {
       console.log("Shuffleboard: Creating board with colored graphics");
-      
+
       // Define the multiplier values and their corresponding colors (red to blue gradient)
       const multiplierZones = [
         { value: "DROP", color: 0x000000 }, // Black drop-off zone at top
@@ -75,25 +75,25 @@ export class Shuffleboard extends Container {
       this.board = new Container();
       this.board.x = 0;
       this.board.y = 50; // Move board halfway back down for smaller gap with drop zone
-      
+
       const tileWidth = 450;   // Width of each zone (reduced by 1/3: 675 * 2/3)
       const tileHeight = 60;   // Height of each zone (2/3 height: 90 * 2/3)
       const boardHeight = tileHeight * multiplierZones.length;
-      
+
       // Create each zone as a colored rectangle with text
       for (let i = 0; i < multiplierZones.length; i++) {
         const zone = multiplierZones[i];
-        
+
         // Create the colored rectangle background
         const rect = new Graphics();
-        rect.rect(-tileWidth/2, -tileHeight/2, tileWidth, tileHeight);
+        rect.rect(-tileWidth / 2, -tileHeight / 2, tileWidth, tileHeight);
         rect.fill(zone.color);
         rect.stroke({ color: 0x000000, width: 2 }); // Black border
-        
+
         // Position the rectangle
         rect.x = 0;
         rect.y = i * tileHeight - (boardHeight / 2) + (tileHeight / 2);
-        
+
         // Create text label for the multiplier value
         const displayText = zone.value === "DROP" ? "💀 DROP OFF ZONE 💀" : zone.value.toString() + "x";
         const text = new Text(displayText, {
@@ -105,14 +105,14 @@ export class Shuffleboard extends Container {
         text.anchor.set(0.5);
         text.x = rect.x;
         text.y = rect.y;
-        
+
         this.board.addChild(rect);
         this.board.addChild(text);
       }
-      
+
       this.boardContainer.addChild(this.board);
       console.log("Shuffleboard: Board created with colored graphics, dimensions:", {
-        width: tileWidth, 
+        width: tileWidth,
         height: boardHeight,
         zoneCount: multiplierZones.length
       });
@@ -124,14 +124,14 @@ export class Shuffleboard extends Container {
   private createGameTitle() {
     try {
       console.log("Shuffleboard: Creating game title");
-      
+
       // Create container for the title words
       const titleContainer = new Container();
-      
+
       // Split title into words and create each on its own row
       const words = ["MULTIPLIER", "SHUFFLE"];
       const wordSpacing = 80; // Vertical spacing between words
-      
+
       words.forEach((word, index) => {
         // Create the word text
         const wordText = new Text(word, {
@@ -141,11 +141,11 @@ export class Shuffleboard extends Container {
           align: 'left',
           fontFamily: 'Arial, sans-serif'
         });
-        
+
         wordText.anchor.set(0, 0.5); // Left-aligned, center vertically
         wordText.x = 0;
         wordText.y = index * wordSpacing - (wordSpacing / 2); // Center the group vertically
-        
+
         // Create shadow for each word
         const wordShadow = new Text(word, {
           fontSize: 48,
@@ -154,23 +154,23 @@ export class Shuffleboard extends Container {
           align: 'left',
           fontFamily: 'Arial, sans-serif'
         });
-        
+
         wordShadow.anchor.set(0, 0.5);
         wordShadow.x = 2; // Slightly offset for shadow effect
         wordShadow.y = (index * wordSpacing - (wordSpacing / 2)) + 2; // Slightly offset for shadow effect
         wordShadow.alpha = 0.3; // Make shadow semi-transparent
-        
+
         // Add shadow first, then word (so word appears on top)
         titleContainer.addChild(wordShadow);
         titleContainer.addChild(wordText);
       });
-      
+
       // Position title container on the left side
       titleContainer.x = -400; // Left side position (will be adjusted in resize)
       titleContainer.y = -200; // Upper area
-      
+
       this.boardContainer.addChild(titleContainer);
-      
+
       console.log("Shuffleboard: Game title created on left side at:", { x: titleContainer.x, y: titleContainer.y });
     } catch (error) {
       console.error("Shuffleboard: Error creating game title:", error);
@@ -180,18 +180,18 @@ export class Shuffleboard extends Container {
   private createWinModal() {
     try {
       console.log("Shuffleboard: Creating win modal");
-      
+
       // Create win modal container
       this.winModal = new Container();
-      
+
       // Modal background with rounded rectangle - make it wider for more content
       const modalBg = new Graphics();
       const modalWidth = 350;
       const modalHeight = 160;
-      modalBg.roundRect(-modalWidth/2, -modalHeight/2, modalWidth, modalHeight, 15);
+      modalBg.roundRect(-modalWidth / 2, -modalHeight / 2, modalWidth, modalHeight, 15);
       modalBg.fill({ color: 0x000000, alpha: 0.8 }); // Semi-transparent black background
       modalBg.stroke({ color: 0x87CEEB, width: 3 }); // Baby blue border
-      
+
       // Title text - show loading message initially
       this.welcomeTitleText = new Text("WELCOME TO MULTIPLIER SHUFFLE", {
         fontSize: 18,
@@ -203,7 +203,7 @@ export class Shuffleboard extends Container {
       this.welcomeTitleText.anchor.set(0.5);
       this.welcomeTitleText.x = 0;
       this.welcomeTitleText.y = -55;
-      
+
       // Loading instruction
       this.welcomeInstructionText = new Text("Click LAUNCH to send puck\nto multiplier heaven!", {
         fontSize: 16,
@@ -214,7 +214,7 @@ export class Shuffleboard extends Container {
       this.welcomeInstructionText.anchor.set(0.5);
       this.welcomeInstructionText.x = 0;
       this.welcomeInstructionText.y = -20;
-      
+
       // Game stats
       this.welcomeStatsText = new Text("Max Win: 1000X  •  RTP: 98%", {
         fontSize: 14,
@@ -226,7 +226,7 @@ export class Shuffleboard extends Container {
       this.welcomeStatsText.anchor.set(0.5);
       this.welcomeStatsText.x = 0;
       this.welcomeStatsText.y = 15;
-      
+
       // Win amount text (initially hidden)
       this.winAmountText = new Text(`$${this.lastWinAmount.toFixed(2)}`, {
         fontSize: 28,
@@ -239,7 +239,7 @@ export class Shuffleboard extends Container {
       this.winAmountText.x = 0;
       this.winAmountText.y = -10;
       this.winAmountText.visible = false; // Hidden initially
-      
+
       // Multiplier text (initially hidden)
       this.multiplierText = new Text(`${this.lastWinMultiplier}x`, {
         fontSize: 22,
@@ -252,7 +252,7 @@ export class Shuffleboard extends Container {
       this.multiplierText.x = 0;
       this.multiplierText.y = 25;
       this.multiplierText.visible = false; // Hidden initially
-      
+
       // Add all elements to modal container
       this.winModal.addChild(modalBg);
       this.winModal.addChild(this.welcomeTitleText);
@@ -260,13 +260,13 @@ export class Shuffleboard extends Container {
       this.winModal.addChild(this.welcomeStatsText);
       this.winModal.addChild(this.winAmountText);
       this.winModal.addChild(this.multiplierText);
-      
+
       // Position at top of board (will be repositioned in resize)
       this.winModal.x = 0; // Center horizontally with board
       this.winModal.y = -400; // Move higher up from board area
-      
+
       this.boardContainer.addChild(this.winModal);
-      
+
       console.log("Shuffleboard: Win modal created at top of board:", { x: this.winModal.x, y: this.winModal.y });
     } catch (error) {
       console.error("Shuffleboard: Error creating win modal:", error);
@@ -277,19 +277,19 @@ export class Shuffleboard extends Container {
     // Create a custom button instead of using playbar.png sprite
     const buttonWidth = 200;
     const buttonHeight = 60;
-    
+
     // Create button container
     const buttonContainer = new Container();
     // Initial position - will be updated in resize
-    buttonContainer.x = 400; 
-    buttonContainer.y = 200; 
-    
+    buttonContainer.x = 400;
+    buttonContainer.y = 200;
+
     // Create button background
     const button = new Graphics();
-    button.roundRect(-buttonWidth/2, -buttonHeight/2, buttonWidth, buttonHeight, 12);
+    button.roundRect(-buttonWidth / 2, -buttonHeight / 2, buttonWidth, buttonHeight, 12);
     button.fill({ color: 0x4CAF50 }); // Green background
     button.stroke({ color: 0xFFFFFF, width: 2 }); // White border
-    
+
     // Create button text
     const buttonText = new Text("LAUNCH", {
       fontSize: 24,
@@ -300,15 +300,15 @@ export class Shuffleboard extends Container {
     buttonText.anchor.set(0.5);
     buttonText.x = 0;
     buttonText.y = 0;
-    
+
     // Add elements to button container
     buttonContainer.addChild(button);
     buttonContainer.addChild(buttonText);
-    
+
     // Make button interactive
     buttonContainer.interactive = true;
     buttonContainer.cursor = "pointer";
-    
+
     // Add click handler to launch the puck
     buttonContainer.on("pointerdown", () => {
       // Only allow manual launch if auto mode is off
@@ -316,26 +316,26 @@ export class Shuffleboard extends Container {
         this.launchPuck();
       }
     });
-    
+
     // Add hover effects
     buttonContainer.on("pointerover", () => {
       button.clear();
-      button.roundRect(-buttonWidth/2, -buttonHeight/2, buttonWidth, buttonHeight, 12);
+      button.roundRect(-buttonWidth / 2, -buttonHeight / 2, buttonWidth, buttonHeight, 12);
       button.fill({ color: 0x45A049 }); // Darker green on hover
       button.stroke({ color: 0x00AFF0, width: 3 }); // Blue border on hover
     });
-    
+
     buttonContainer.on("pointerout", () => {
       button.clear();
-      button.roundRect(-buttonWidth/2, -buttonHeight/2, buttonWidth, buttonHeight, 12);
+      button.roundRect(-buttonWidth / 2, -buttonHeight / 2, buttonWidth, buttonHeight, 12);
       button.fill({ color: 0x4CAF50 }); // Normal green
       button.stroke({ color: 0xFFFFFF, width: 2 }); // White border normally
     });
-    
+
     // Store reference as playbar for compatibility
     this.playbar = buttonContainer;
     this.boardContainer.addChild(buttonContainer);
-    
+
     console.log("Shuffleboard: Custom launch button created at:", { x: buttonContainer.x, y: buttonContainer.y });
   }
 
@@ -343,19 +343,19 @@ export class Shuffleboard extends Container {
     // Create auto button similar to launch button but smaller
     const buttonWidth = 160;
     const buttonHeight = 50;
-    
+
     // Create button container
     const autoButtonContainer = new Container();
     // Initial position - will be updated in resize (positioned below launch button)
-    autoButtonContainer.x = 500; 
+    autoButtonContainer.x = 500;
     autoButtonContainer.y = 280; // Below the launch button
-    
+
     // Create button background
     const button = new Graphics();
-    button.roundRect(-buttonWidth/2, -buttonHeight/2, buttonWidth, buttonHeight, 10);
+    button.roundRect(-buttonWidth / 2, -buttonHeight / 2, buttonWidth, buttonHeight, 10);
     button.fill({ color: this.isAutoMode ? 0xFF6B35 : 0x2196F3 }); // Orange when active, blue when inactive
     button.stroke({ color: 0xFFFFFF, width: 2 }); // White border
-    
+
     // Create button text
     const buttonText = new Text(this.isAutoMode ? "AUTO ON" : "AUTO OFF", {
       fontSize: 20,
@@ -366,39 +366,39 @@ export class Shuffleboard extends Container {
     buttonText.anchor.set(0.5);
     buttonText.x = 0;
     buttonText.y = 0;
-    
+
     // Add elements to button container
     autoButtonContainer.addChild(button);
     autoButtonContainer.addChild(buttonText);
-    
+
     // Make button interactive
     autoButtonContainer.interactive = true;
     autoButtonContainer.cursor = "pointer";
-    
+
     // Add click handler to toggle auto mode
     autoButtonContainer.on("pointerdown", () => {
       this.toggleAutoMode(button, buttonText);
     });
-    
+
     // Add hover effects
     autoButtonContainer.on("pointerover", () => {
       button.clear();
-      button.roundRect(-buttonWidth/2, -buttonHeight/2, buttonWidth, buttonHeight, 10);
+      button.roundRect(-buttonWidth / 2, -buttonHeight / 2, buttonWidth, buttonHeight, 10);
       button.fill({ color: this.isAutoMode ? 0xFF8C69 : 0x42A5F5 }); // Lighter shade on hover
       button.stroke({ color: 0x00AFF0, width: 3 }); // Blue border on hover
     });
-    
+
     autoButtonContainer.on("pointerout", () => {
       button.clear();
-      button.roundRect(-buttonWidth/2, -buttonHeight/2, buttonWidth, buttonHeight, 10);
+      button.roundRect(-buttonWidth / 2, -buttonHeight / 2, buttonWidth, buttonHeight, 10);
       button.fill({ color: this.isAutoMode ? 0xFF6B35 : 0x2196F3 }); // Normal color
       button.stroke({ color: 0xFFFFFF, width: 2 }); // White border normally
     });
-    
+
     // Store reference
     this.autoButton = autoButtonContainer;
     this.boardContainer.addChild(autoButtonContainer);
-    
+
     console.log("Shuffleboard: Auto button created at:", { x: autoButtonContainer.x, y: autoButtonContainer.y });
   }
 
@@ -411,7 +411,7 @@ export class Shuffleboard extends Container {
     launchPad.x = 0; // Center on the board
     launchPad.y = 443; // Position for launch pad (438 + 5px)
     this.boardContainer.addChild(launchPad);
-    
+
     // Use the properly sized puck.png (22x23px) and scale it down
     this.puck = Sprite.from("puck.png");
     this.puck.anchor.set(0.5);
@@ -429,22 +429,22 @@ export class Shuffleboard extends Container {
     const boardHeight = 720; // Increased height for 12 zones (12 zones * 60px each)
     const borderWidth = 470; // Width to contain the 450px wide zones with padding
     const borderHeight = boardHeight + 80; // Increased padding for board height
-    const borderX = -borderWidth/2; // Center the border
-    const borderY = -borderHeight/2 + 90; // Shift down by 90px (50px + 40px for 2/3 drop zone height)
-    
+    const borderX = -borderWidth / 2; // Center the border
+    const borderY = -borderHeight / 2 + 90; // Shift down by 90px (50px + 40px for 2/3 drop zone height)
+
     // Inner border (white border around game)
     this.boardBorder = new Graphics();
     this.boardBorder.rect(borderX, borderY, borderWidth, borderHeight);
     this.boardBorder.stroke({ color: 0xFFFFFF, width: 2 });
     this.boardContainer.addChild(this.boardBorder);
-    
+
     // Outer border (decorative grey border)
     const outerBorder = new Graphics();
     const outerPadding = 15;
     outerBorder.rect(borderX - outerPadding, borderY - outerPadding, borderWidth + (outerPadding * 2), borderHeight + (outerPadding * 2));
     outerBorder.stroke({ color: 0x888888, width: 3 }); // Grey outer border
     this.boardContainer.addChild(outerBorder);
-    
+
     // Add hover effect for the border when button is hovered
     if (this.playbar) {
       this.playbar.on("pointerover", () => {
@@ -454,7 +454,7 @@ export class Shuffleboard extends Container {
           this.boardBorder.stroke({ color: 0x00AFF0, width: 3 }); // Blue on hover
         }
       });
-      
+
       this.playbar.on("pointerout", () => {
         if (this.boardBorder) {
           this.boardBorder.clear();
@@ -463,25 +463,25 @@ export class Shuffleboard extends Container {
         }
       });
     }
-    
+
     console.log("Shuffleboard: Fixed borders created to properly contain board");
   }
 
   private toggleAutoMode(button: Graphics, buttonText: Text) {
     this.isAutoMode = !this.isAutoMode;
-    
+
     // Update button appearance
     const buttonWidth = 160;
     const buttonHeight = 50;
-    
+
     button.clear();
-    button.roundRect(-buttonWidth/2, -buttonHeight/2, buttonWidth, buttonHeight, 10);
+    button.roundRect(-buttonWidth / 2, -buttonHeight / 2, buttonWidth, buttonHeight, 10);
     button.fill({ color: this.isAutoMode ? 0xFF6B35 : 0x2196F3 }); // Orange when active, blue when inactive
     button.stroke({ color: 0xFFFFFF, width: 2 });
-    
+
     // Update button text
     buttonText.text = this.isAutoMode ? "AUTO ON" : "AUTO OFF";
-    
+
     if (this.isAutoMode) {
       // Start auto mode - launch first puck
       this.launchPuck();
@@ -505,40 +505,40 @@ export class Shuffleboard extends Container {
 
     // Clear win modal when launching puck
     this.clearWinModal();
-    
+
     try {
       this.isProcessingRound = true;
-      
+
       // Get bet amount from GameScreen
       const betAmount = this.gameScreenRef?.getBetAmount() || 1.00;
       const betAmountMicro = stakeAPI.toMicroUnits(betAmount);
-      
+
       console.log("Launching puck with bet:", betAmount);
-      
+
       // Track game event
       await stakeAPI.trackEvent('puck_launch');
-      
+
       // Call Stake API to play round
       const playResponse = await stakeAPI.play(betAmountMicro);
       this.currentRound = playResponse.round;
-      
+
       // Update balance in GameScreen
       if (this.gameScreenRef?.updateBalance) {
         const newBalance = stakeAPI.fromMicroUnits(playResponse.balance.amount);
         this.gameScreenRef.updateBalance(newBalance);
       }
-      
+
       // Extract game result from round data
       const { multiplier, finalPosition, winAmount } = playResponse.round;
       this.targetZone = finalPosition || 0;
-      
+
       // Start puck animation to target zone
       this.animatePuckToZone(this.targetZone, multiplier, stakeAPI.fromMicroUnits(winAmount || 0));
-      
+
     } catch (error) {
       console.error("Error launching puck:", error);
       this.isProcessingRound = false;
-      
+
       // Fallback: use local simulation
       this.simulateLocalGame();
     }
@@ -546,16 +546,16 @@ export class Shuffleboard extends Container {
 
   private animatePuckToZone(targetZone: number, multiplier: number, winAmount: number) {
     if (!this.puck || !engine().ticker.started) return;
-    
+
     console.log(`Animating puck to zone ${targetZone}, multiplier: ${multiplier}x, win: $${winAmount}`);
-    
+
     // Calculate target Y position based on zone
     const zoneHeight = 60;
     const totalZones = 12;
     const boardHeight = zoneHeight * totalZones;
     const startY = 443; // Launch pad position
     const targetY = targetZone * zoneHeight - (boardHeight / 2) + (zoneHeight / 2) + 50; // Board offset
-    
+
     // Store animation state
     const animationData = {
       startY: startY,
@@ -567,68 +567,68 @@ export class Shuffleboard extends Container {
       duration: 2000 + Math.random() * 1000, // 2-3 seconds
       startTime: Date.now()
     };
-    
+
     // Smooth animation function with easing
     const animatePuck = () => {
       if (!this.puck) {
         engine().ticker.remove(animatePuck, this);
         return;
       }
-      
+
       const elapsed = Date.now() - animationData.startTime;
       const progress = Math.min(elapsed / animationData.duration, 1);
-      
+
       // Ease out cubic for realistic physics
       const easeProgress = 1 - Math.pow(1 - progress, 3);
-      
+
       // Update puck position with some horizontal drift for realism
       const drift = Math.sin(progress * Math.PI * 2) * 15;
       this.puck.y = animationData.startY + (animationData.targetY - animationData.startY) * easeProgress;
       this.puck.x = drift;
-      
+
       // Animation complete
       if (progress >= 1) {
         engine().ticker.remove(animatePuck, this);
         this.onPuckLanded(animationData.multiplier, animationData.winAmount);
       }
     };
-    
+
     // Start animation
     engine().ticker.add(animatePuck, this);
   }
 
   private async onPuckLanded(multiplier: number, winAmount: number) {
     console.log(`Puck landed! Multiplier: ${multiplier}x, Win: $${winAmount}`);
-    
+
     try {
       // Track landing event
       await stakeAPI.trackEvent('puck_landed');
-      
+
       // Update win display
       this.updateWinDisplay(winAmount, multiplier);
-      
+
       // If there's a win, we need to call endRound to complete the bet
       if (winAmount > 0 && this.currentRound) {
         console.log("Win detected, calling endRound to complete bet...");
-        
+
         // Add small delay for dramatic effect
         setTimeout(async () => {
           try {
             const endRoundResponse = await stakeAPI.endRound();
-            
+
             // Update balance after payout
             if (this.gameScreenRef?.updateBalance) {
               const finalBalance = stakeAPI.fromMicroUnits(endRoundResponse.balance.amount);
               this.gameScreenRef.updateBalance(finalBalance);
             }
-            
+
             console.log("Round completed successfully");
           } catch (error) {
             console.error("Error ending round:", error);
           }
         }, 1000);
       }
-      
+
     } catch (error) {
       console.error("Error in puck landed handler:", error);
     } finally {
@@ -636,7 +636,7 @@ export class Shuffleboard extends Container {
       this.resetPuckPosition();
       this.isProcessingRound = false;
       this.currentRound = null;
-      
+
       // Continue auto mode if it's enabled
       if (this.isAutoMode) {
         setTimeout(() => {
@@ -657,14 +657,14 @@ export class Shuffleboard extends Container {
 
   private simulateLocalGame() {
     console.log("Using local game simulation");
-    
+
     // Define multiplier zones (same as createBoard)
     const multiplierZones = [0, 1000, 0, 500, 100, 25, 10, 5, 1, 0, 0, 0]; // Skip DROP zone
     const randomZone = Math.floor(Math.random() * multiplierZones.length);
     const multiplier = multiplierZones[randomZone];
     const betAmount = this.gameScreenRef?.getBetAmount() || 1.00;
     const winAmount = betAmount * multiplier;
-    
+
     // Animate to the randomly selected zone
     this.animatePuckToZone(randomZone, multiplier, winAmount);
   }
@@ -672,61 +672,61 @@ export class Shuffleboard extends Container {
   private clearWinModal() {
     // Reset win modal to show welcome message instead of win results
     console.log("Clearing win modal - resetting to welcome state");
-    
+
     // Show welcome content
     if (this.welcomeTitleText) {
       this.welcomeTitleText.visible = true;
       console.log("Welcome title text shown");
     }
-    
+
     if (this.welcomeInstructionText) {
       this.welcomeInstructionText.visible = true;
       console.log("Welcome instruction text shown");
     }
-    
+
     if (this.welcomeStatsText) {
       this.welcomeStatsText.visible = true;
       console.log("Welcome stats text shown");
     }
-    
+
     // Hide win content
     if (this.winTitleText) {
       this.winTitleText.visible = false;
       console.log("Win title text hidden");
     }
-    
+
     if (this.winAmountText) {
       this.winAmountText.visible = false;
       console.log("Win amount text hidden");
     }
-    
+
     if (this.multiplierText) {
       this.multiplierText.visible = false;
       console.log("Multiplier text hidden");
     }
-    
+
     console.log("Win modal cleared - showing welcome message");
   }
 
   public updateWinDisplay(winAmount: number, multiplier: number) {
     this.lastWinAmount = winAmount;
     this.lastWinMultiplier = multiplier;
-    
+
     console.log("Updating win display - hiding welcome, showing win results");
-    
+
     // Hide welcome content
     if (this.welcomeTitleText) {
       this.welcomeTitleText.visible = false;
     }
-    
+
     if (this.welcomeInstructionText) {
       this.welcomeInstructionText.visible = false;
     }
-    
+
     if (this.welcomeStatsText) {
       this.welcomeStatsText.visible = false;
     }
-    
+
     // Create or show "LAST WIN" title
     if (!this.winTitleText && this.winModal) {
       this.winTitleText = new Text("LAST WIN", {
@@ -742,40 +742,40 @@ export class Shuffleboard extends Container {
       this.winModal.addChild(this.winTitleText);
       console.log("Created LAST WIN title");
     }
-    
+
     if (this.winTitleText) {
       this.winTitleText.visible = true;
     }
-    
+
     // Show win results
     if (this.winAmountText) {
       this.winAmountText.text = `$${winAmount.toFixed(2)}`;
       this.winAmountText.visible = true;
     }
-    
+
     if (this.multiplierText) {
       this.multiplierText.text = `${multiplier}x`;
       this.multiplierText.visible = true;
     }
-    
+
     // Play cashout sound for big wins (100x multiplier or more, or $100+ win)
     if (multiplier >= 100 || winAmount >= 100) {
       console.log("Big win detected - would play cashout sound");
     }
-    
+
     console.log("Win display updated:", { winAmount, multiplier });
   }
 
   private setupKeyboardControls() {
     try {
       console.log("Shuffleboard: Setting up keyboard controls");
-      
+
       // Add keyboard event listener for spacebar and arrow keys
       const handleKeyDown = (event: KeyboardEvent) => {
         // Check if spacebar was pressed (keyCode 32 or key === ' ')
         if (event.code === 'Space' || event.key === ' ') {
           event.preventDefault(); // Prevent page scroll on spacebar
-          
+
           // Only allow launch if auto mode is off (same logic as click handler)
           if (!this.isAutoMode) {
             this.launchPuck();
@@ -801,13 +801,13 @@ export class Shuffleboard extends Container {
           }
         }
       };
-      
+
       // Add the event listener to the document
       document.addEventListener('keydown', handleKeyDown);
-      
+
       // Store reference to remove listener later
       this.keyboardHandler = handleKeyDown;
-      
+
       console.log("Shuffleboard: Keyboard controls setup complete - spacebar launches, arrows control bet");
     } catch (error) {
       console.error("Shuffleboard: Error setting up keyboard controls:", error);
@@ -821,22 +821,22 @@ export class Shuffleboard extends Container {
 
   public resize(width: number, height: number) {
     console.log("Shuffleboard resize called:", { width, height });
-    
+
     // Always center the shuffleboard in the screen
     this.x = width / 2; // Center shuffleboard horizontally
     this.y = height / 2;
-    
+
     console.log("Shuffleboard positioned at:", { x: this.x, y: this.y });
-    
+
     // Define responsive breakpoints (media query style)
     const isMobile = width < 768; // Mobile: < 768px
     const isTablet = width >= 768 && width < 1024; // Tablet: 768px - 1023px
     const isDesktop = width >= 1024; // Desktop: >= 1024px
     const isLandscape = width > height;
     const isPortrait = height > width;
-    
+
     console.log("Device type:", { isMobile, isTablet, isDesktop, isLandscape, isPortrait });
-    
+
     // Position launch button based on device type and orientation
     if (this.playbar) {
       if (isMobile) {
@@ -871,7 +871,7 @@ export class Shuffleboard extends Container {
       }
       console.log("Launch button positioned at:", { x: this.playbar.x, y: this.playbar.y });
     }
-    
+
     // Position auto button relative to launch button
     if (this.autoButton && this.playbar) {
       if (isMobile) {
@@ -901,7 +901,7 @@ export class Shuffleboard extends Container {
       }
       console.log("Auto button positioned at:", { x: this.autoButton.x, y: this.autoButton.y });
     }
-    
+
     // Position win modal at the top of the board (fixed position)
     if (this.winModal) {
       // Always position at top center of the board, regardless of device
@@ -909,11 +909,11 @@ export class Shuffleboard extends Container {
       this.winModal.y = -400; // Fixed position higher up from board
       console.log("Win modal positioned at top of board:", { x: this.winModal.x, y: this.winModal.y });
     }
-    
+
     // Scale board for different screen sizes
     if (this.board) {
       let boardScale = 1.0;
-      
+
       if (isMobile) {
         boardScale = isPortrait ? 0.6 : 0.7; // Smaller on mobile
       } else if (isTablet) {
@@ -921,11 +921,11 @@ export class Shuffleboard extends Container {
       } else {
         boardScale = 1.0; // Full size on desktop
       }
-      
+
       this.board.scale.set(boardScale);
       console.log("Board scaled to:", boardScale);
     }
-    
+
     // Scale and position game title for different screen sizes
     if (this.boardContainer.children.length > 1) {
       // Find the game title container
@@ -939,11 +939,11 @@ export class Shuffleboard extends Container {
               break;
             }
           }
-          
+
           if (hasTitle) {
             let titleScale = 1.0;
             let titleX = -(width / 2) + 100; // Left side positioning
-            
+
             if (isMobile) {
               titleScale = isPortrait ? 0.6 : 0.7; // Smaller on mobile
               titleX = -(width / 2) + 50; // Closer to edge on mobile
@@ -954,7 +954,7 @@ export class Shuffleboard extends Container {
               titleScale = 1.0; // Full size on desktop
               titleX = -(width / 2) + 120; // More spacing on desktop
             }
-            
+
             child.scale.set(titleScale);
             child.x = titleX;
             console.log("Game title scaled and positioned:", { scale: titleScale, x: titleX });
@@ -963,7 +963,7 @@ export class Shuffleboard extends Container {
         }
       }
     }
-    
+
     // Log board dimensions for debugging
     if (this.board) {
       console.log("Board container dimensions:", {
@@ -982,14 +982,14 @@ export class Shuffleboard extends Container {
       clearInterval(this.autoInterval);
       this.autoInterval = undefined;
     }
-    
+
     // Clean up keyboard event listener
     if (this.keyboardHandler) {
       document.removeEventListener('keydown', this.keyboardHandler);
       this.keyboardHandler = undefined;
       console.log("Shuffleboard: Keyboard controls cleaned up");
     }
-    
+
     super.destroy();
   }
 }

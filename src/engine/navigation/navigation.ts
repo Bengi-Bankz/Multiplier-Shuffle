@@ -31,7 +31,7 @@ interface AppScreen extends Container {
 
 /** Interface for app screens constructors */
 interface AppScreenConstructor {
-  new (): AppScreen;
+  new(): AppScreen;
   /** List of assets bundles required by the screen */
   assetBundles?: string[];
 }

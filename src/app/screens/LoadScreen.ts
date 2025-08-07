@@ -25,7 +25,7 @@ export class LoadScreen extends Container {
     this.loaderImage.style.zIndex = "1000";
     this.loaderImage.style.backgroundColor = "#000000";
     document.body.appendChild(this.loaderImage);
-    
+
     // Switch to static PNG after animation completes (if you have a PNG version)
     setTimeout(() => {
       if (this.loaderImage) {
@@ -37,7 +37,7 @@ export class LoadScreen extends Container {
   private async showOnlySpinsLoader() {
     // Remove the stake engine loader
     this.removeLoader();
-    
+
     // Show the onlyspins loader full screen
     this.loaderImage = document.createElement("img");
     this.loaderImage.src = `/onlyspinsloader.gif`;
@@ -50,7 +50,7 @@ export class LoadScreen extends Container {
     this.loaderImage.style.zIndex = "1000";
     this.loaderImage.style.backgroundColor = "#000000";
     document.body.appendChild(this.loaderImage);
-    
+
     // Show for a bit
     await new Promise(resolve => setTimeout(resolve, 5000));
   }
@@ -74,7 +74,7 @@ export class LoadScreen extends Container {
     // Load the assets and show the loader for a bit
     await this.loadGameAssets();
     console.log("LoadScreen: First loader completed");
-    
+
     // Show the onlyspins loader after the first loader
     await this.showOnlySpinsLoader();
     console.log("LoadScreen: Second loader completed, LoadScreen should end now");

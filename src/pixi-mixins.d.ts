@@ -10,8 +10,8 @@ declare global {
       navigation: Navigation;
     }
     // eslint-disable-next-line @typescript-eslint/no-empty-object-type
-    interface ApplicationOptions extends CreationResizePluginOptions {}
+    interface ApplicationOptions extends CreationResizePluginOptions { }
   }
 }
 
-export {};
+export { };

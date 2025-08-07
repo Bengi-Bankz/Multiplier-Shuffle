@@ -71,11 +71,11 @@ export class GameScreen extends Container {
     console.log("GameScreen: Prepare method called");
     await this.shuffleboard.init();
     console.log("GameScreen: Shuffleboard initialized");
-    
+
     // Set GameScreen reference in Shuffleboard for keyboard controls
     this.shuffleboard.setGameScreenReference(this);
     console.log("GameScreen: Reference set in Shuffleboard for bet controls");
-    
+
     this.mainContainer.addChild(this.shuffleboard);
     console.log("GameScreen: Shuffleboard added to container");
   }
@@ -106,7 +106,7 @@ export class GameScreen extends Container {
     const isDesktop = width >= 1024; // Desktop: >= 1024px
     const isLandscape = width > height;
     const isPortrait = height > width;
-    
+
     console.log("GameScreen device type:", { isMobile, isTablet, isDesktop, isLandscape, isPortrait });
 
     // Position balance text responsively
@@ -136,7 +136,7 @@ export class GameScreen extends Container {
       // Get auto button position relative to shuffleboard center
       let autoButtonX = 0;
       let autoButtonY = 0;
-      
+
       // Calculate auto button position (same logic as in Shuffleboard resize method)
       if (isMobile) {
         if (isPortrait) {
@@ -166,11 +166,11 @@ export class GameScreen extends Container {
         autoButtonY = (height / 2) + (-(height / 4) + 120); // 120px below launch button
         this.betContainer.scale.set(0.9);
       }
-      
+
       // Position bet controls below auto button
       this.betContainer.x = autoButtonX;
       this.betContainer.y = autoButtonY + 80; // 80px below auto button
-      
+
       console.log("Bet area positioned under auto button at:", { x: this.betContainer.x, y: this.betContainer.y });
     }
 
@@ -198,13 +198,13 @@ export class GameScreen extends Container {
     // Position game info modal responsively if it exists
     if (this.gameInfoModal) {
       let modalScale = 1.0;
-      
+
       if (isMobile) {
         modalScale = isPortrait ? 0.7 : 0.8;
       } else if (isTablet) {
         modalScale = 0.9;
       }
-      
+
       this.gameInfoModal.scale.set(modalScale);
       this.gameInfoModal.x = width / 2;
       this.gameInfoModal.y = height / 2;
@@ -455,49 +455,49 @@ export class GameScreen extends Container {
 
     // Create hamburger button (three lines)
     this.hamburgerButton = new Container();
-    
+
     // Create button background
     const buttonBg = new Graphics();
     buttonBg.roundRect(-25, -25, 50, 50, 8);
     buttonBg.fill({ color: 0x333333, alpha: 0.8 });
     buttonBg.stroke({ color: 0xffffff, width: 2 });
-    
+
     // Create three horizontal lines
     const lineStyle = { color: 0xffffff, width: 3 };
-    
+
     // Top line
     const line1 = new Graphics();
     line1.moveTo(-12, -8);
     line1.lineTo(12, -8);
     line1.stroke(lineStyle);
-    
+
     // Middle line
     const line2 = new Graphics();
     line2.moveTo(-12, 0);
     line2.lineTo(12, 0);
     line2.stroke(lineStyle);
-    
+
     // Bottom line
     const line3 = new Graphics();
     line3.moveTo(-12, 8);
     line3.lineTo(12, 8);
     line3.stroke(lineStyle);
-    
+
     // Add all elements to hamburger button
     this.hamburgerButton.addChild(buttonBg);
     this.hamburgerButton.addChild(line1);
     this.hamburgerButton.addChild(line2);
     this.hamburgerButton.addChild(line3);
-    
+
     // Make button interactive
     this.hamburgerButton.interactive = true;
     this.hamburgerButton.cursor = 'pointer';
-    
+
     // Add click handler
     this.hamburgerButton.on('pointerdown', () => {
       this.toggleMenu();
     });
-    
+
     // Add hover effects
     this.hamburgerButton.on('pointerover', () => {
       buttonBg.clear();
@@ -505,25 +505,25 @@ export class GameScreen extends Container {
       buttonBg.fill({ color: 0x555555, alpha: 0.9 });
       buttonBg.stroke({ color: 0x00ff00, width: 3 });
     });
-    
+
     this.hamburgerButton.on('pointerout', () => {
       buttonBg.clear();
       buttonBg.roundRect(-25, -25, 50, 50, 8);
       buttonBg.fill({ color: 0x333333, alpha: 0.8 });
       buttonBg.stroke({ color: 0xffffff, width: 2 });
     });
-    
+
     // Create dropdown menu (initially hidden)
     this.dropdownMenu = new Container();
     this.dropdownMenu.visible = false;
-    
+
     // Dropdown background
     const dropdownBg = new Graphics();
     dropdownBg.roundRect(-120, 0, 240, 200, 8); // Increased width from 160 to 240
     dropdownBg.fill({ color: 0x222222, alpha: 0.95 });
     dropdownBg.stroke({ color: 0xffffff, width: 2 });
     this.dropdownMenu.addChild(dropdownBg);
-    
+
     // Create menu items
     const menuItems = [
       { text: "GAME INFO", action: () => this.showGameInfo() },
@@ -531,7 +531,7 @@ export class GameScreen extends Container {
       { text: "WHY STAKE ENGINE?", action: () => console.log("Why Stake Engine clicked") },
       { text: "EXIT", action: () => console.log("Exit clicked") }
     ];
-    
+
     const itemStyle = new TextStyle({
       fontFamily: 'Arial, sans-serif',
       fontSize: 18,
@@ -539,15 +539,15 @@ export class GameScreen extends Container {
       fill: '#ffffff',
       align: 'center'
     });
-    
+
     menuItems.forEach((item, index) => {
       const menuItem = new Container();
-      
+
       // Item background
       const itemBg = new Graphics();
       itemBg.roundRect(-115, -15, 230, 30, 5); // Increased width from 150 to 230
       itemBg.fill({ color: 0x333333, alpha: 0.5 });
-      
+
       // Item text
       const itemText = new Text({
         text: item.text,
@@ -556,56 +556,56 @@ export class GameScreen extends Container {
       itemText.anchor.set(0.5);
       itemText.x = 0;
       itemText.y = 0;
-      
+
       menuItem.addChild(itemBg);
       menuItem.addChild(itemText);
-      
+
       // Position item
       menuItem.x = 0;
       menuItem.y = 25 + (index * 40);
-      
+
       // Make interactive
       menuItem.interactive = true;
       menuItem.cursor = 'pointer';
-      
+
       // Add click handler
       menuItem.on('pointerdown', () => {
         item.action();
         this.toggleMenu(); // Close menu after clicking item
       });
-      
+
       // Add hover effects
       menuItem.on('pointerover', () => {
         itemBg.clear();
         itemBg.roundRect(-115, -15, 230, 30, 5); // Increased width from 150 to 230
         itemBg.fill({ color: 0x555555, alpha: 0.8 });
       });
-      
+
       menuItem.on('pointerout', () => {
         itemBg.clear();
         itemBg.roundRect(-115, -15, 230, 30, 5); // Increased width from 150 to 230
         itemBg.fill({ color: 0x333333, alpha: 0.5 });
       });
-      
+
       this.dropdownMenu.addChild(menuItem);
     });
-    
+
     // Add components to menu container
     this.menuContainer.addChild(this.hamburgerButton);
     this.menuContainer.addChild(this.dropdownMenu);
-    
+
     // Position menu in top right (will be updated in resize)
     this.menuContainer.x = 800; // Temporary position
     this.menuContainer.y = 50;  // Temporary position
-    
+
     // Add menu to screen
     this.addChild(this.menuContainer);
   }
-  
+
   private toggleMenu() {
     this.isMenuOpen = !this.isMenuOpen;
     this.dropdownMenu.visible = this.isMenuOpen;
-    
+
     console.log("Menu toggled:", this.isMenuOpen ? "opened" : "closed");
   }
 
@@ -623,15 +623,15 @@ export class GameScreen extends Container {
 
     // Create game info modal container
     this.gameInfoModal = new Container();
-    
+
     // Modal background with rounded rectangle
     const modalWidth = 400;
     const modalHeight = 300;
     const modalBg = new Graphics();
-    modalBg.roundRect(-modalWidth/2, -modalHeight/2, modalWidth, modalHeight, 15);
+    modalBg.roundRect(-modalWidth / 2, -modalHeight / 2, modalWidth, modalHeight, 15);
     modalBg.fill({ color: 0x000000, alpha: 0.9 }); // Semi-transparent black background
     modalBg.stroke({ color: 0x87CEEB, width: 3 }); // Baby blue border
-    
+
     // Title text
     const titleText = new Text("GAME INFO", {
       fontSize: 28,
@@ -643,7 +643,7 @@ export class GameScreen extends Container {
     titleText.anchor.set(0.5);
     titleText.x = 0;
     titleText.y = -120;
-    
+
     // Game description
     const descText = new Text("Launch the puck up the board to hit multiplier zones.\nHigher zones give bigger wins!", {
       fontSize: 16,
@@ -654,7 +654,7 @@ export class GameScreen extends Container {
     descText.anchor.set(0.5);
     descText.x = 0;
     descText.y = -80;
-    
+
     // Keyboard controls section
     const controlsTitle = new Text("KEYBOARD CONTROLS", {
       fontSize: 20,
@@ -666,7 +666,7 @@ export class GameScreen extends Container {
     controlsTitle.anchor.set(0.5);
     controlsTitle.x = 0;
     controlsTitle.y = -30;
-    
+
     // Spacebar control
     const spaceText = new Text("SPACEBAR - Launch Puck", {
       fontSize: 16,
@@ -677,7 +677,7 @@ export class GameScreen extends Container {
     spaceText.anchor.set(0.5);
     spaceText.x = 0;
     spaceText.y = 10;
-    
+
     // Arrow keys control
     const arrowText = new Text("↑↓ ARROWS - Adjust Bet Amount", {
       fontSize: 16,
@@ -688,14 +688,14 @@ export class GameScreen extends Container {
     arrowText.anchor.set(0.5);
     arrowText.x = 0;
     arrowText.y = 40;
-    
+
     // Close button
     const closeButton = new Container();
     const closeBg = new Graphics();
     closeBg.roundRect(-60, -20, 120, 40, 8);
     closeBg.fill({ color: 0x87CEEB }); // Baby blue background
     closeBg.stroke({ color: 0xFFFFFF, width: 2 }); // White border
-    
+
     const closeText = new Text("CLOSE", {
       fontSize: 18,
       fontWeight: 'bold',
@@ -706,34 +706,34 @@ export class GameScreen extends Container {
     closeText.anchor.set(0.5);
     closeText.x = 0;
     closeText.y = 0;
-    
+
     closeButton.addChild(closeBg);
     closeButton.addChild(closeText);
     closeButton.x = 0;
     closeButton.y = 100;
-    
+
     // Make close button interactive
     closeButton.interactive = true;
     closeButton.cursor = 'pointer';
-    
+
     closeButton.on('pointerdown', () => {
       this.closeGameInfo();
     });
-    
+
     closeButton.on('pointerover', () => {
       closeBg.clear();
       closeBg.roundRect(-60, -20, 120, 40, 8);
       closeBg.fill({ color: 0xA0D8F0 }); // Lighter blue on hover
       closeBg.stroke({ color: 0xFFFFFF, width: 2 });
     });
-    
+
     closeButton.on('pointerout', () => {
       closeBg.clear();
       closeBg.roundRect(-60, -20, 120, 40, 8);
       closeBg.fill({ color: 0x87CEEB }); // Normal blue
       closeBg.stroke({ color: 0xFFFFFF, width: 2 });
     });
-    
+
     // Add all elements to modal container
     this.gameInfoModal.addChild(modalBg);
     this.gameInfoModal.addChild(titleText);
@@ -742,13 +742,13 @@ export class GameScreen extends Container {
     this.gameInfoModal.addChild(spaceText);
     this.gameInfoModal.addChild(arrowText);
     this.gameInfoModal.addChild(closeButton);
-    
+
     // Center the modal on screen
     this.gameInfoModal.x = this.mainContainer.width / 2;
     this.gameInfoModal.y = this.mainContainer.height / 2;
-    
+
     this.addChild(this.gameInfoModal);
-    
+
     console.log("Game info modal created and displayed");
   }
 
